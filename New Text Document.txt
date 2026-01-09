@@ -1,0 +1,64 @@
+AI-Dungeon-Master/
+├── frontend/   ← what the player sees
+├── backend/    ← the DM brain + game logic
+├── shared/     ← shared types & schemas (optional but powerful)
+├── launcher.bat
+
+
+frontend/
+├── src/
+│   ├── components/
+│   │   ├── DMSetup.jsx        ← tone, difficulty, rules
+│   │   ├── GameScreen.jsx    ← chat log + input
+│   │   ├── ChatLog.jsx
+│   │   ├── PlayerInput.jsx
+│   │   └── CharacterPanel.jsx
+│   │
+│   ├── pages/
+│   │   ├── Setup.jsx         ← DM creation screen
+│   │   └── Play.jsx          ← main game
+│   │
+│   ├── services/
+│   │   └── api.js            ← calls backend (/start, /turn)
+│   │
+│   ├── state/
+│   │   └── campaignStore.js  ← frontend game state (lightweight)
+│   │
+│   └── App.jsx
+│
+└── package.json
+
+
+
+backend/
+├── src/
+│   ├── index.js              ← server entry point
+│   ├── routes/
+│   │   ├── campaign.js       ← /start-campaign
+│   │   └── turn.js           ← /player-action
+│   │
+│   ├── dm/
+│   │   ├── systemPrompt.js   ← builds DM personality
+│   │   ├── dmEngine.js       ← talks to OpenAI
+│   │   └── dice.js           ← real dice rolls
+│   │
+│   ├── game/
+│   │   ├── state.js          ← world state object
+│   │   ├── combat.js         ← initiative, attacks
+│   │   └── parser.js         ← interprets DM JSON output
+│   │
+│   └── memory/
+│       ├── summarizer.js     ← trims old messages
+│       └── saveLoad.js       ← save / load campaign
+│
+└── package.json
+
+
+
+shared/
+├── dmResponse.schema.json
+├── gameState.schema.json
+└── types.ts
+
+
+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
