@@ -1,18 +1,20 @@
+// backend/src/routes/voice.js
 import express from "express";
-import fetch from "node-fetch";
 
 const router = express.Router();
 
-const ELEVENLABS_API_KEY = process.env.ELEVENLABS_API_KEY;
+const ELEVENLABS_API_KEY = process.env.ELEVENLABS_API_KEY || "sk_8b508aa9cf4346db31a259ad9bc5bce9dfe18f0b9342f223";
 
-// Simple voice map (expand later)
+// Expanded voice map with better character voices
 const VOICES = {
-  narrator: "21m00Tcm4TlvDq8ikWAM", // Rachel
-  dark: "AZnzlk1XvdvUeBnXmlld",
-  gruff: "TxGEqnHWrfWFTfGW9XjX",
-  old_wise: "EXAVITQu4vr4xnSDxMaL",
-  young: "MF3mGyEYCl7XYWbV9V6O",
-  female: "21m00Tcm4TlvDq8ikWAM",
+  narrator: "21m00Tcm4TlvDq8ikWAM", // Rachel - warm, clear narrator
+  dark: "AZnzlk1XvdvUeBnXmlld", // Domi - dark, mysterious
+  gruff: "TxGEqnHWrfWFTfGW9XjX", // Josh - deep, gruff warrior
+  old_wise: "EXAVITQu4vr4xnSDxMaL", // Bella - wise elder
+  young: "MF3mGyEYCl7XYWbV9V6O", // Elli - young, energetic
+  female: "21m00Tcm4TlvDq8ikWAM", // Rachel
+  male: "TxGEqnHWrfWFTfGW9XjX", // Josh
+  epic: "pNInz6obpgDQGcFmaJgB", // Adam - epic narrator
 };
 
 router.post("/voice", async (req, res) => {
@@ -20,12 +22,25 @@ router.post("/voice", async (req, res) => {
     const { text, voice = "narrator" } = req.body;
 
     if (!text) {
+      console.error("❌ No text provided");
       return res.status(400).json({ error: "Text is required" });
     }
 
+    console.log("🎙️ Generating voice for:", text.substring(0, 50) + "...");
+    console.log("🎭 Using voice:", voice);
+    console.log("🔑 API Key exists:", !!ELEVENLABS_API_KEY);
+
     const voiceId = VOICES[voice] || VOICES.narrator;
 
-    const response = await fetch(
+    // Using native fetch (Node 18+) or dynamic import for node-fetch
+    let fetchFunc = fetch;
+    if (typeof fetch === 'undefined') {
+      console.log("📦 Using node-fetch...");
+      const nodeFetch = await import('node-fetch');
+      fetchFunc = nodeFetch.default;
+    }
+
+    const response = await fetchFunc(
       `https://api.elevenlabs.io/v1/text-to-speech/${voiceId}`,
       {
         method: "POST",
@@ -35,29 +50,47 @@ router.post("/voice", async (req, res) => {
         },
         body: JSON.stringify({
           text,
-          model_id: "eleven_monolingual_v1",
+          model_id: "eleven_turbo_v2_5",
           voice_settings: {
-            stability: 0.45,
+            stability: 0.5,
             similarity_boost: 0.75,
+            style: 0.0,
+            use_speaker_boost: true
           },
         }),
       }
     );
 
+    console.log("📡 ElevenLabs response status:", response.status);
+
     if (!response.ok) {
       const error = await response.text();
-      throw new Error(error);
+      console.error("❌ ElevenLabs API error:", error);
+      return res.status(response.status).json({ 
+        error: "ElevenLabs API error", 
+        details: error 
+      });
     }
 
     const audioBuffer = await response.arrayBuffer();
     const audioBase64 = Buffer.from(audioBuffer).toString("base64");
 
+    console.log("✅ Voice generated, size:", audioBuffer.byteLength, "bytes");
+
     res.json({
       audio: `data:audio/mpeg;base64,${audioBase64}`,
     });
   } catch (err) {
-    console.error("ElevenLabs error:", err);
-    res.status(500).json({ error: "Voice generation failed" });
+    console.error("❌ Voice generation failed:");
+    console.error("Error name:", err.name);
+    console.error("Error message:", err.message);
+    console.error("Stack:", err.stack);
+    
+    res.status(500).json({ 
+      error: "Voice generation failed", 
+      details: err.message,
+      stack: err.stack 
+    });
   }
 });
 

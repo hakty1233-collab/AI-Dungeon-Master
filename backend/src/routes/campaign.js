@@ -1,3 +1,4 @@
+// backend/src/routes/campaign.js
 import express from "express";
 import { initCampaign } from "../game/state.js";
 import { runDM } from "../dm/dmEngine.js";
@@ -13,21 +14,31 @@ router.post("/start-campaign", async (req, res) => {
     let campaignState = initCampaign({ theme, difficulty, party });
 
     // DM generates first narration
-    const dmIntro = await runDM({
+    const dmResult = await runDM({
       campaign: campaignState,
       playerMessage: "Begin the adventure.",
     });
 
-    // Add DM narration to history
+    // Use the updated campaign state from DM
+    campaignState = dmResult.campaignState;
+
+    // Add the intro narration to history
     campaignState.history = [
       ...(campaignState.history || []),
-      { role: "assistant", content: dmIntro.narration },
+      { role: "assistant", content: dmResult.aiResponse },
     ];
+
+    console.log("✅ Campaign started:", {
+      theme,
+      difficulty,
+      partySize: party.length,
+      firstNarration: dmResult.aiResponse.substring(0, 50) + "..."
+    });
 
     res.json({ campaignState });
   } catch (err) {
-    console.error("Failed to start campaign:", err);
-    res.status(500).json({ error: "Failed to start campaign" });
+    console.error("❌ Failed to start campaign:", err);
+    res.status(500).json({ error: "Failed to start campaign", details: err.message });
   }
 });
 

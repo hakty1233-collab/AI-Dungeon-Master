@@ -1,3 +1,6 @@
+// frontend/src/components/CharacterSheetModal.jsx
+import { useState } from "react";
+
 export default function CharacterSheetModal({ player, onSave, onClose }) {
   const [char, setChar] = useState(player);
 

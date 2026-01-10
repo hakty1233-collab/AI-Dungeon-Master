@@ -11,6 +11,7 @@ export const useCampaignStore = create((set) => ({
   combatState: null,    // Active combat only
 
   voiceMode: true,
+  soundEffectsEnabled: true, // NEW: Sound effects toggle
   micListening: false,
 
   // 🚀 START / LOAD CAMPAIGN
@@ -92,4 +93,8 @@ export const useCampaignStore = create((set) => ({
 
   toggleVoice: () =>
     set((s) => ({ voiceMode: !s.voiceMode })),
+
+  // 🔊 SOUND EFFECTS CONTROL
+  toggleSoundEffects: () =>
+    set((s) => ({ soundEffectsEnabled: !s.soundEffectsEnabled })),
 }));
