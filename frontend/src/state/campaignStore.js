@@ -34,6 +34,16 @@ export const useCampaignStore = create((set) => ({
       combatState: campaign.combatState || null,
     }),
 
+  // 👥 UPDATE PARTY
+  updateParty: (updatedParty) =>
+    set((state) => ({
+      party: updatedParty,
+      campaign: state.campaign ? {
+        ...state.campaign,
+        party: updatedParty
+      } : null
+    })),
+
   // 🎭 DM RESPONSE UPDATE
   updateFromDM: ({ aiResponse, campaignState }) =>
     set((state) => ({

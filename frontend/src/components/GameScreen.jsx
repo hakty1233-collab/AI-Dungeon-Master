@@ -4,12 +4,20 @@ import { playTurn } from "../services/api";
 import { generateVoice } from "../services/voiceApi";
 import { generateSoundEffects } from "../services/soundEffectsApi";
 import { parseNarrative } from "../utils/narrativeParser";
+import { autoSave } from "../services/saveLoadService";
+import { addExperience } from "../utils/characterSystem";
 import ChatLog from "./ChatLog";
 import DiceRoller from "./DiceRoller";
+import SaveLoadModal from "./SaveLoadModal";
+import CharacterSheet from "./CharacterSheet";
 
 export default function GameScreen() {
   const [input, setInput] = useState("");
   const [isGeneratingVoice, setIsGeneratingVoice] = useState(false);
+  const [showSaveModal, setShowSaveModal] = useState(false);
+  const [showLoadModal, setShowLoadModal] = useState(false);
+  const [selectedCharacter, setSelectedCharacter] = useState(null);
+  const [showCharacterSheet, setShowCharacterSheet] = useState(false);
   const audioRef = useRef(null);
   const audioQueue = useRef([]);
   const isPlaying = useRef(false);
@@ -19,6 +27,7 @@ export default function GameScreen() {
   const campaign = useCampaignStore((state) => state.campaign);
   const party = useCampaignStore((state) => state.party);
   const updateFromDM = useCampaignStore((state) => state.updateFromDM);
+  const setCampaign = useCampaignStore((state) => state.setCampaign);
   const voiceMode = useCampaignStore((state) => state.voiceMode);
   const soundEffectsEnabled = useCampaignStore((state) => state.soundEffectsEnabled || false);
   const micListening = useCampaignStore((state) => state.micListening);
@@ -367,6 +376,9 @@ export default function GameScreen() {
       
       updateFromDM(dmResponse);
 
+      // Auto-save after each turn
+      autoSave(dmResponse.campaignState, party);
+
       // Trigger ElevenLabs narration with sound effects
       if (dmResponse?.aiResponse) {
         console.log("🎤 Attempting to speak response...");
@@ -381,6 +393,27 @@ export default function GameScreen() {
     }
   };
 
+  const handleLoadCampaign = (loadedCampaign, loadedParty) => {
+    setCampaign({
+      ...loadedCampaign,
+      party: loadedParty
+    });
+    alert("Campaign loaded successfully!");
+  };
+
+  const handleCharacterUpdate = (updatedCharacter) => {
+    const updatedParty = party.map(char =>
+      char.name === updatedCharacter.name ? updatedCharacter : char
+    );
+    updateParty(updatedParty);
+    setSelectedCharacter(updatedCharacter);
+  };
+
+  const handleViewCharacter = (character) => {
+    setSelectedCharacter(character);
+    setShowCharacterSheet(true);
+  };
+
   if (!campaign) return <p>No campaign started.</p>;
 
   /* ============================
@@ -388,8 +421,46 @@ export default function GameScreen() {
      ============================ */
   return (
     <div style={{ padding: "20px" }}>
-      <h2>{campaign.theme} Adventure</h2>
-      <p>Difficulty: {campaign.difficulty}</p>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "20px" }}>
+        <div>
+          <h2 style={{ margin: 0 }}>{campaign.theme} Adventure</h2>
+          <p style={{ margin: "5px 0" }}>Difficulty: {campaign.difficulty}</p>
+        </div>
+        
+        {/* Save/Load Buttons */}
+        <div style={{ display: "flex", gap: "10px" }}>
+          <button
+            onClick={() => setShowSaveModal(true)}
+            style={{
+              padding: "10px 20px",
+              backgroundColor: "#4CAF50",
+              color: "white",
+              border: "none",
+              borderRadius: "5px",
+              cursor: "pointer",
+              fontWeight: "bold",
+              fontSize: "14px"
+            }}
+          >
+            💾 Save
+          </button>
+          <button
+            onClick={() => setShowLoadModal(true)}
+            style={{
+              padding: "10px 20px",
+              backgroundColor: "#2196F3",
+              color: "white",
+              border: "none",
+              borderRadius: "5px",
+              cursor: "pointer",
+              fontWeight: "bold",
+              fontSize: "14px"
+            }}
+          >
+            📂 Load
+          </button>
+        </div>
+      </div>
 
       {/* Audio Controls */}
       <div style={{ marginBottom: "15px", padding: "10px", border: "1px solid #ccc", borderRadius: "5px" }}>
@@ -421,13 +492,90 @@ export default function GameScreen() {
       </div>
 
       <h3>Party</h3>
-      <ul>
+      <div style={{ 
+        display: 'flex', 
+        gap: '10px', 
+        flexWrap: 'wrap',
+        marginBottom: '20px'
+      }}>
         {party.map((c, i) => (
-          <li key={i}>
-            {c.name} — HP: {c.hp} — {c.status}
-          </li>
+          <div
+            key={i}
+            onClick={() => handleViewCharacter(c)}
+            style={{
+              backgroundColor: '#2a2a2a',
+              padding: '15px',
+              borderRadius: '10px',
+              border: '2px solid #444',
+              cursor: 'pointer',
+              minWidth: '200px',
+              transition: 'all 0.2s',
+              ':hover': {
+                borderColor: '#ffd700'
+              }
+            }}
+            onMouseEnter={(e) => e.currentTarget.style.borderColor = '#ffd700'}
+            onMouseLeave={(e) => e.currentTarget.style.borderColor = '#444'}
+          >
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'start' }}>
+              <div>
+                <h4 style={{ margin: '0 0 5px 0', color: '#ffd700' }}>{c.name}</h4>
+                <p style={{ margin: '3px 0', fontSize: '12px', color: '#aaa' }}>
+                  Lvl {c.level} {c.race} {c.class}
+                </p>
+              </div>
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleViewCharacter(c);
+                }}
+                style={{
+                  padding: '5px 10px',
+                  backgroundColor: '#4CAF50',
+                  color: 'white',
+                  border: 'none',
+                  borderRadius: '5px',
+                  cursor: 'pointer',
+                  fontSize: '12px'
+                }}
+              >
+                📋 Sheet
+              </button>
+            </div>
+            
+            {/* HP Bar */}
+            <div style={{ marginTop: '10px' }}>
+              <div style={{ fontSize: '12px', marginBottom: '3px', color: '#aaa' }}>
+                HP: {c.hp} / {c.maxHp}
+              </div>
+              <div style={{
+                width: '100%',
+                height: '8px',
+                backgroundColor: '#1a1a1a',
+                borderRadius: '4px',
+                overflow: 'hidden'
+              }}>
+                <div style={{
+                  width: `${(c.hp / c.maxHp) * 100}%`,
+                  height: '100%',
+                  backgroundColor: c.hp > c.maxHp * 0.5 ? '#4CAF50' : 
+                                  c.hp > c.maxHp * 0.25 ? '#ff9800' : '#f44336',
+                  transition: 'width 0.3s ease'
+                }} />
+              </div>
+            </div>
+
+            {/* XP Progress */}
+            {c.xp !== undefined && (
+              <div style={{ marginTop: '8px' }}>
+                <div style={{ fontSize: '11px', color: '#888' }}>
+                  XP: {c.xp}
+                </div>
+              </div>
+            )}
+          </div>
         ))}
-      </ul>
+      </div>
 
       <DiceRoller onRoll={handleDiceRoll} />
 
@@ -465,6 +613,37 @@ export default function GameScreen() {
           🎤 Voice Input (Disabled)
         </button>
       </form>
+
+      {/* Character Sheet Modal */}
+      {showCharacterSheet && selectedCharacter && (
+        <CharacterSheet
+          character={selectedCharacter}
+          onUpdate={handleCharacterUpdate}
+          onClose={() => {
+            setShowCharacterSheet(false);
+            setSelectedCharacter(null);
+          }}
+        />
+      )}
+
+      {/* Save/Load Modals */}
+      <SaveLoadModal
+        isOpen={showSaveModal}
+        onClose={() => setShowSaveModal(false)}
+        mode="save"
+        campaign={campaign}
+        party={party}
+        onLoad={handleLoadCampaign}
+      />
+
+      <SaveLoadModal
+        isOpen={showLoadModal}
+        onClose={() => setShowLoadModal(false)}
+        mode="load"
+        campaign={campaign}
+        party={party}
+        onLoad={handleLoadCampaign}
+      />
     </div>
   );
 }
