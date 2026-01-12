@@ -1,3 +1,4 @@
+// frontend/src/components/GameScreen.jsx
 import { useState, useEffect, useRef } from "react";
 import { useCampaignStore } from "../state/campaignStore";
 import { playTurn } from "../services/api";
@@ -5,29 +6,42 @@ import { generateVoice } from "../services/voiceApi";
 import { generateSoundEffects } from "../services/soundEffectsApi";
 import { parseNarrative } from "../utils/narrativeParser";
 import { autoSave } from "../services/saveLoadService";
-import { addExperience } from "../utils/characterSystem";
+import { processXPFromNarration, awardXPToParty } from "../utils/xpSystem";
 import ChatLog from "./ChatLog";
 import DiceRoller from "./DiceRoller";
 import SaveLoadModal from "./SaveLoadModal";
 import CharacterSheet from "./CharacterSheet";
+import LevelUpNotification from "./LevelUpNotification";
+import XPNotification from "./XPNotification";
+import CombatTracker from "./CombatTracker";
+import StartCombatModal from "./StartCombatModal";
 
 export default function GameScreen() {
+  // Local state
   const [input, setInput] = useState("");
   const [isGeneratingVoice, setIsGeneratingVoice] = useState(false);
   const [showSaveModal, setShowSaveModal] = useState(false);
   const [showLoadModal, setShowLoadModal] = useState(false);
   const [selectedCharacter, setSelectedCharacter] = useState(null);
   const [showCharacterSheet, setShowCharacterSheet] = useState(false);
+  const [levelUpData, setLevelUpData] = useState(null);
+  const [xpNotification, setXPNotification] = useState(null);
+  const [combat, setCombat] = useState(null);
+  const [showStartCombat, setShowStartCombat] = useState(false);
+  
+  // Refs
   const audioRef = useRef(null);
   const audioQueue = useRef([]);
   const isPlaying = useRef(false);
-  const recognitionRef = useRef(null); // Store recognition instance
+  const recognitionRef = useRef(null);
   const silenceTimeoutRef = useRef(null);
 
+  // Store state
   const campaign = useCampaignStore((state) => state.campaign);
   const party = useCampaignStore((state) => state.party);
   const updateFromDM = useCampaignStore((state) => state.updateFromDM);
   const setCampaign = useCampaignStore((state) => state.setCampaign);
+  const updateParty = useCampaignStore((state) => state.updateParty);
   const voiceMode = useCampaignStore((state) => state.voiceMode);
   const soundEffectsEnabled = useCampaignStore((state) => state.soundEffectsEnabled || false);
   const micListening = useCampaignStore((state) => state.micListening);
@@ -37,137 +51,11 @@ export default function GameScreen() {
   const toggleSoundEffects = useCampaignStore((state) => state.toggleSoundEffects || (() => {}));
 
   /* ============================
-     Speech Recognition
+     Speech Recognition (Disabled)
      ============================ */
   useEffect(() => {
-    if (!micListening) {
-      console.log("🔇 Mic is off, cleaning up if needed");
-      // Stop recognition if it's running
-      if (recognitionRef.current) {
-        try {
-          recognitionRef.current.stop();
-        } catch (e) {
-          console.log("Recognition already stopped");
-        }
-        recognitionRef.current = null;
-      }
-      if (silenceTimeoutRef.current) {
-        clearTimeout(silenceTimeoutRef.current);
-        silenceTimeoutRef.current = null;
-      }
-      return;
-    }
-
-    console.log("🎤 Mic listening state changed to: true");
-
-    const startRecognition = async () => {
-      // Request mic permission first
-      try {
-        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-        console.log("✅ Microphone permission granted!");
-        stream.getTracks().forEach(track => track.stop());
-      } catch (err) {
-        console.error("❌ Microphone permission denied:", err);
-        alert("Please allow microphone access when prompted by your browser.");
-        toggleMic();
-        return;
-      }
-
-      const SpeechRecognition =
-        window.SpeechRecognition || window.webkitSpeechRecognition;
-
-      if (!SpeechRecognition) {
-        console.error("❌ Speech recognition not supported");
-        alert("Speech recognition is not supported in this browser. Try Chrome or Edge.");
-        toggleMic();
-        return;
-      }
-
-      try {
-        const recognition = new SpeechRecognition();
-        recognitionRef.current = recognition;
-        
-        recognition.continuous = true;
-        recognition.lang = "en-US";
-        recognition.interimResults = true;
-        recognition.maxAlternatives = 1;
-
-        let finalTranscript = '';
-
-        recognition.onstart = () => {
-          console.log("✅ Microphone ACTUALLY started listening!");
-          finalTranscript = '';
-        };
-
-        recognition.onaudiostart = () => {
-          console.log("🔊 Audio capture started");
-        };
-
-        recognition.onsoundstart = () => {
-          console.log("🔊 Sound detected!");
-        };
-
-        recognition.onspeechstart = () => {
-          console.log("🗣️ Speech started!");
-          if (silenceTimeoutRef.current) {
-            clearTimeout(silenceTimeoutRef.current);
-            silenceTimeoutRef.current = null;
-          }
-        };
-
-        recognition.onresult = (event) => {
-          console.log("📝 Got result!");
-          
-          let interimTranscript = '';
-          
-          for (let i = event.resultIndex; i < event.results.length; i++) {
-            const transcript = event.results[i][0].transcript;
-            
-            if (event.results[i].isFinal) {
-              console.log(`✅ Final: "${transcript}"`);
-              finalTranscript += transcript + ' ';
-            } else {
-              console.log(`⏳ Interim: "${transcript}"`);
-              interimTranscript += transcript;
-            }
-          }
-          
-          setInput((finalTranscript + interimTranscript).trim());
-        };
-
-        recognition.onspeechend = () => {
-          console.log("🛑 Speech ended (will continue listening)");
-        };
-
-        recognition.onerror = (err) => {
-          console.error("❌ Recognition error:", err.error);
-          
-          if (err.error === 'not-allowed') {
-            alert("Microphone blocked! Check browser settings.");
-          } else if (err.error === 'no-speech') {
-            console.log("⚠️ No speech - continuing...");
-          }
-        };
-
-        recognition.onend = () => {
-          console.log("🎤 Recognition ended");
-          
-          // Don't auto-restart - just notify user
-          console.log("Click the STOP button to turn off the microphone");
-        };
-
-        console.log("🎤 Starting speech recognition NOW...");
-        recognition.start();
-        
-      } catch (err) {
-        console.error("❌ Failed to create recognition:", err);
-        alert("Failed to start: " + err.message);
-        toggleMic();
-      }
-    };
-
-    startRecognition();
-  }, [micListening]); // Removed toggleMic from dependencies
+    // Speech recognition disabled
+  }, [micListening]);
 
   /* ============================
      Audio Queue System
@@ -188,7 +76,7 @@ export default function GameScreen() {
     audioRef.current.onended = () => {
       console.log(`✅ Finished playing ${audioItem.type}`);
       isPlaying.current = false;
-      playAudioQueue(); // Play next in queue
+      playAudioQueue();
     };
 
     audioRef.current.onerror = (err) => {
@@ -206,12 +94,12 @@ export default function GameScreen() {
   };
 
   /* ============================
-     Play Background Sound Effects (simultaneous with narration)
+     Play Background Sound Effects
      ============================ */
   const playBackgroundSound = (audioData, category) => {
     try {
       const audio = new Audio(audioData);
-      audio.volume = 0.3; // Quiet background sound
+      audio.volume = 0.3;
       audio.loop = false;
       
       console.log(`🎵 Playing background sound: ${category}`);
@@ -220,7 +108,6 @@ export default function GameScreen() {
         console.error("❌ Failed to play background sound:", err);
       });
       
-      // Auto-cleanup after it finishes
       audio.onended = () => {
         console.log(`✅ Background sound finished: ${category}`);
       };
@@ -249,7 +136,6 @@ export default function GameScreen() {
         return;
       }
 
-      // Play sound effects immediately in the background (not queued)
       soundEffects.forEach(sfx => {
         console.log(`🎵 Playing background sound: ${sfx.category}`);
         playBackgroundSound(sfx.audio, sfx.category);
@@ -273,23 +159,19 @@ export default function GameScreen() {
       setIsGeneratingVoice(true);
       console.log(`🎙️ Generating ${voice} voice with ElevenLabs...`);
       
-      // Clean text of markdown
       const cleanText = text
         .replace(/\*\*(.*?)\*\*/g, "$1")
         .replace(/\*(.*?)\*/g, "$1")
         .replace(/#{1,6}\s/g, "");
 
-      // Generate narration
       const audioData = await generateVoice({ text: cleanText, voice });
       
-      // Add narration to queue
       audioQueue.current.push({
         audio: audioData,
         type: `narration_${voice}`,
         volume: 1.0
       });
 
-      // If nothing is playing, start the queue
       if (!isPlaying.current) {
         playAudioQueue();
       }
@@ -298,7 +180,6 @@ export default function GameScreen() {
     } catch (err) {
       console.error("❌ Failed to generate voice:", err);
       setIsGeneratingVoice(false);
-      // Fallback to browser TTS
       console.log("⚠️ Falling back to browser TTS");
       const utterance = new SpeechSynthesisUtterance(text);
       speechSynthesis.speak(utterance);
@@ -314,16 +195,13 @@ export default function GameScreen() {
       return;
     }
 
-    // Parse the entire response for dialogue first
     const fullText = typeof aiResponse === 'string' ? aiResponse : 
                      Array.isArray(aiResponse) ? aiResponse.map(e => e.text).join(' ') : '';
     
-    // Generate sound effects ONCE for the entire narration (plays in background)
     if (soundEffectsEnabled && fullText) {
       playSoundEffects(fullText);
     }
 
-    // Handle array of structured responses
     if (Array.isArray(aiResponse)) {
       console.log("📚 Speaking array of", aiResponse.length, "entries");
       for (const entry of aiResponse) {
@@ -336,13 +214,11 @@ export default function GameScreen() {
       return;
     }
 
-    // Handle plain text - parse for dialogue
     if (typeof aiResponse === 'string' && aiResponse.trim()) {
       console.log("📖 Parsing narrative for dialogue...");
       const segments = parseNarrative(aiResponse);
       console.log(`🎭 Found ${segments.length} segments`);
       
-      // Speak each segment with appropriate voice
       for (const segment of segments) {
         console.log(`  🗣️ ${segment.type} (${segment.voice}): "${segment.text.substring(0, 40)}..."`);
         await speakWithElevenLabs(segment.text, segment.voice);
@@ -376,10 +252,29 @@ export default function GameScreen() {
       
       updateFromDM(dmResponse);
 
-      // Auto-save after each turn
+      if (dmResponse?.aiResponse && party.length > 0) {
+        const xpResult = processXPFromNarration(dmResponse.aiResponse, party);
+        
+        if (xpResult) {
+          console.log("🎉 XP Awarded:", xpResult);
+          
+          updateParty(xpResult.partyUpdates);
+          
+          setXPNotification({
+            xpGained: xpResult.totalXP,
+            reason: xpResult.message
+          });
+          
+          if (xpResult.levelUps.length > 0) {
+            setTimeout(() => {
+              setLevelUpData(xpResult.levelUps);
+            }, 3500);
+          }
+        }
+      }
+
       autoSave(dmResponse.campaignState, party);
 
-      // Trigger ElevenLabs narration with sound effects
       if (dmResponse?.aiResponse) {
         console.log("🎤 Attempting to speak response...");
         await speakAIResponse(dmResponse.aiResponse);
@@ -414,205 +309,232 @@ export default function GameScreen() {
     setShowCharacterSheet(true);
   };
 
-  if (!campaign) return <p>No campaign started.</p>;
+  const handleStartCombat = (newCombat) => {
+    setCombat(newCombat);
+    setShowStartCombat(false);
+    console.log("⚔️ Combat started!", newCombat);
+  };
 
-  /* ============================
-     UI
-     ============================ */
+  const handleUpdateCombat = (updatedCombat) => {
+    setCombat(updatedCombat);
+  };
+
+  const handleEndCombat = (result) => {
+    console.log("Combat ended:", result);
+    
+    if (result.result === 'victory' && result.xpReward) {
+      const xpResult = awardXPToParty(party, result.xpReward, 'Combat Victory');
+      updateParty(xpResult.partyUpdates);
+      
+      setXPNotification({
+        xpGained: result.xpReward,
+        reason: 'Combat Victory!'
+      });
+      
+      if (xpResult.levelUps.length > 0) {
+        setTimeout(() => {
+          setLevelUpData(xpResult.levelUps);
+        }, 3500);
+      }
+    }
+    
+    setCombat(null);
+    alert(result.message);
+  };
+
+  if (!campaign) return (
+    <div className="container" style={{ textAlign: 'center', paddingTop: '100px' }}>
+      <h1>No Campaign Started</h1>
+      <p style={{ color: '#888', fontSize: '18px' }}>Please start a campaign from the setup screen.</p>
+    </div>
+  );
+
   return (
-    <div style={{ padding: "20px" }}>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "20px" }}>
-        <div>
-          <h2 style={{ margin: 0 }}>{campaign.theme} Adventure</h2>
-          <p style={{ margin: "5px 0" }}>Difficulty: {campaign.difficulty}</p>
-        </div>
-        
-        {/* Save/Load Buttons */}
-        <div style={{ display: "flex", gap: "10px" }}>
-          <button
-            onClick={() => setShowSaveModal(true)}
-            style={{
-              padding: "10px 20px",
-              backgroundColor: "#4CAF50",
-              color: "white",
-              border: "none",
-              borderRadius: "5px",
-              cursor: "pointer",
-              fontWeight: "bold",
-              fontSize: "14px"
-            }}
-          >
-            💾 Save
-          </button>
-          <button
-            onClick={() => setShowLoadModal(true)}
-            style={{
-              padding: "10px 20px",
-              backgroundColor: "#2196F3",
-              color: "white",
-              border: "none",
-              borderRadius: "5px",
-              cursor: "pointer",
-              fontWeight: "bold",
-              fontSize: "14px"
-            }}
-          >
-            📂 Load
-          </button>
-        </div>
-      </div>
-
-      {/* Audio Controls */}
-      <div style={{ marginBottom: "15px", padding: "10px", border: "1px solid #ccc", borderRadius: "5px" }}>
-        <h4 style={{ marginTop: 0 }}>Audio Settings</h4>
-        
-        <label style={{ display: "block", marginBottom: "5px" }}>
-          <input 
-            type="checkbox" 
-            checked={voiceMode} 
-            onChange={toggleVoice}
-          />
-          {" "}🎙️ Voice Narration {voiceMode ? "ON" : "OFF"}
-        </label>
-
-        <label style={{ display: "block" }}>
-          <input 
-            type="checkbox" 
-            checked={soundEffectsEnabled} 
-            onChange={toggleSoundEffects}
-          />
-          {" "}🔊 Sound Effects {soundEffectsEnabled ? "ON" : "OFF"}
-        </label>
-
-        {isGeneratingVoice && (
-          <div style={{ marginTop: "5px", color: "#888" }}>
-            ⏳ Generating audio...
-          </div>
-        )}
-      </div>
-
-      <h3>Party</h3>
-      <div style={{ 
-        display: 'flex', 
-        gap: '10px', 
-        flexWrap: 'wrap',
-        marginBottom: '20px'
-      }}>
-        {party.map((c, i) => (
-          <div
-            key={i}
-            onClick={() => handleViewCharacter(c)}
-            style={{
-              backgroundColor: '#2a2a2a',
-              padding: '15px',
-              borderRadius: '10px',
-              border: '2px solid #444',
-              cursor: 'pointer',
-              minWidth: '200px',
-              transition: 'all 0.2s',
-              ':hover': {
-                borderColor: '#ffd700'
-              }
-            }}
-            onMouseEnter={(e) => e.currentTarget.style.borderColor = '#ffd700'}
-            onMouseLeave={(e) => e.currentTarget.style.borderColor = '#444'}
-          >
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'start' }}>
-              <div>
-                <h4 style={{ margin: '0 0 5px 0', color: '#ffd700' }}>{c.name}</h4>
-                <p style={{ margin: '3px 0', fontSize: '12px', color: '#aaa' }}>
-                  Lvl {c.level} {c.race} {c.class}
-                </p>
-              </div>
-              <button
-                onClick={(e) => {
-                  e.stopPropagation();
-                  handleViewCharacter(c);
-                }}
-                style={{
-                  padding: '5px 10px',
-                  backgroundColor: '#4CAF50',
-                  color: 'white',
-                  border: 'none',
-                  borderRadius: '5px',
-                  cursor: 'pointer',
-                  fontSize: '12px'
-                }}
-              >
-                📋 Sheet
-              </button>
+    <div style={{ minHeight: '100vh', background: 'linear-gradient(135deg, #0a0a0a 0%, #1a1a1a 100%)' }}>
+      <div className="container">
+        {/* Header */}
+        <div className="card mb-lg" style={{ marginBottom: '20px' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <div>
+              <h2 style={{ margin: 0 }}>{campaign.theme} Adventure</h2>
+              <p style={{ margin: '5px 0 0 0', color: '#aaa', fontSize: '16px' }}>
+                Difficulty: {campaign.difficulty}
+              </p>
             </div>
             
-            {/* HP Bar */}
-            <div style={{ marginTop: '10px' }}>
-              <div style={{ fontSize: '12px', marginBottom: '3px', color: '#aaa' }}>
-                HP: {c.hp} / {c.maxHp}
-              </div>
-              <div style={{
-                width: '100%',
-                height: '8px',
-                backgroundColor: '#1a1a1a',
-                borderRadius: '4px',
-                overflow: 'hidden'
-              }}>
-                <div style={{
-                  width: `${(c.hp / c.maxHp) * 100}%`,
-                  height: '100%',
-                  backgroundColor: c.hp > c.maxHp * 0.5 ? '#4CAF50' : 
-                                  c.hp > c.maxHp * 0.25 ? '#ff9800' : '#f44336',
-                  transition: 'width 0.3s ease'
-                }} />
-              </div>
+            <div style={{ display: 'flex', gap: '10px' }}>
+              <button onClick={() => setShowStartCombat(true)} className="btn btn-danger">
+                ⚔️ Combat
+              </button>
+              <button onClick={() => setShowSaveModal(true)} className="btn btn-success">
+                💾 Save
+              </button>
+              <button onClick={() => setShowLoadModal(true)} className="btn btn-info">
+                📂 Load
+              </button>
             </div>
+          </div>
+        </div>
 
-            {/* XP Progress */}
-            {c.xp !== undefined && (
-              <div style={{ marginTop: '8px' }}>
-                <div style={{ fontSize: '11px', color: '#888' }}>
-                  XP: {c.xp}
-                </div>
+        {/* Audio Settings */}
+        <div className="card mb-lg">
+          <h4 style={{ margin: '0 0 15px 0' }}>🎵 Audio Settings</h4>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+            <label style={{ display: 'flex', alignItems: 'center', gap: '10px', cursor: 'pointer' }}>
+              <input 
+                type="checkbox" 
+                checked={voiceMode} 
+                onChange={toggleVoice}
+              />
+              <span>🎙️ Voice Narration {voiceMode ? "ON" : "OFF"}</span>
+            </label>
+            <label style={{ display: 'flex', alignItems: 'center', gap: '10px', cursor: 'pointer' }}>
+              <input 
+                type="checkbox" 
+                checked={soundEffectsEnabled} 
+                onChange={toggleSoundEffects}
+              />
+              <span>🔊 Sound Effects {soundEffectsEnabled ? "ON" : "OFF"}</span>
+            </label>
+            {isGeneratingVoice && (
+              <div style={{ marginTop: '5px', color: '#888', fontSize: '14px' }}>
+                ⏳ Generating audio...
               </div>
             )}
           </div>
-        ))}
+        </div>
+
+        {/* Party */}
+        <div className="mb-lg">
+          <h3 style={{ marginBottom: '15px' }}>👥 Your Party</h3>
+          <div className="grid grid-auto">
+            {party.map((c, i) => {
+              const hpPercent = (c.hp / c.maxHp) * 100;
+              const hpColor = hpPercent > 50 ? '#4CAF50' : hpPercent > 25 ? '#ff9800' : '#f44336';
+              
+              return (
+                <div
+                  key={i}
+                  className="card card-hover"
+                  onClick={() => handleViewCharacter(c)}
+                  style={{ cursor: 'pointer' }}
+                >
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '12px' }}>
+                    <div>
+                      <h4 style={{ margin: '0 0 5px 0' }}>{c.name}</h4>
+                      <p style={{ margin: 0, fontSize: '13px', color: '#aaa' }}>
+                        Lvl {c.level} {c.race} {c.class}
+                      </p>
+                    </div>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleViewCharacter(c);
+                      }}
+                      className="btn btn-success btn-sm"
+                    >
+                      📋 Sheet
+                    </button>
+                  </div>
+                  
+                  <div style={{ marginTop: '12px' }}>
+                    <div style={{ fontSize: '12px', color: '#aaa', marginBottom: '5px' }}>
+                      HP: {c.hp} / {c.maxHp}
+                    </div>
+                    <div className="progress-bar">
+                      <div 
+                        className="progress-fill" 
+                        style={{ width: `${hpPercent}%`, backgroundColor: hpColor }}
+                      />
+                    </div>
+                  </div>
+
+                  {c.xp !== undefined && (
+                    <div style={{ marginTop: '8px', fontSize: '12px', color: '#888' }}>
+                      XP: {c.xp}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+
+        <div style={{ marginBottom: '20px' }}>
+          <DiceRoller onRoll={handleDiceRoll} />
+        </div>
+
+        {/* Adventure Log */}
+        <div className="card mb-lg">
+          <h3 style={{ margin: '0 0 15px 0' }}>📜 Adventure Log</h3>
+          <ChatLog history={campaign.history} />
+        </div>
+
+        {/* Input */}
+        <div className="card">
+          <form onSubmit={handleSubmit} style={{ display: 'flex', gap: '10px' }}>
+            <input
+              value={input}
+              onChange={(e) => setInput(e.target.value)}
+              placeholder="What do you do?"
+              className="input"
+              disabled={isGeneratingVoice}
+              style={{ flex: 1 }}
+            />
+            <button 
+              type="submit" 
+              disabled={isGeneratingVoice} 
+              className="btn btn-primary"
+            >
+              Submit
+            </button>
+            <button 
+              type="button"
+              className="btn btn-ghost"
+              disabled={true}
+              title="Speech input is currently disabled"
+              style={{ opacity: 0.5, cursor: 'not-allowed' }}
+            >
+              🎤 Voice
+            </button>
+          </form>
+        </div>
       </div>
 
-      <DiceRoller onRoll={handleDiceRoll} />
-
-      <h3>Adventure Log</h3>
-      <ChatLog history={campaign.history} />
-
-      <form onSubmit={handleSubmit} style={{ marginTop: "10px" }}>
-        <input
-          value={input}
-          onChange={(e) => setInput(e.target.value)}
-          placeholder="What do you do?"
-          style={{ 
-            width: "300px", 
-            marginRight: "5px"
-          }}
-          disabled={isGeneratingVoice}
+      {/* Combat Tracker */}
+      {combat && combat.isActive && (
+        <CombatTracker
+          combat={combat}
+          onUpdate={handleUpdateCombat}
+          onEnd={handleEndCombat}
         />
-        <button type="submit" disabled={isGeneratingVoice}>
-          Submit
-        </button>
-        {/* Speech input is optional - typing works great! */}
-        <button 
-          type="button" 
-          onClick={toggleMic} 
-          style={{ 
-            marginLeft: "5px",
-            backgroundColor: micListening ? "#ff4444" : "#666",
-            color: "white",
-            opacity: 0.5,
-            cursor: "not-allowed"
-          }}
-          disabled={true}
-          title="Speech input is currently disabled - just type your actions!"
-        >
-          🎤 Voice Input (Disabled)
-        </button>
-      </form>
+      )}
+
+      {/* Start Combat Modal */}
+      {showStartCombat && (
+        <StartCombatModal
+          party={party}
+          onStart={handleStartCombat}
+          onClose={() => setShowStartCombat(false)}
+        />
+      )}
+
+      {/* Level-Up Notification */}
+      {levelUpData && (
+        <LevelUpNotification
+          levelUps={levelUpData}
+          onClose={() => setLevelUpData(null)}
+        />
+      )}
+
+      {/* XP Notification */}
+      {xpNotification && (
+        <XPNotification
+          xpGained={xpNotification.xpGained}
+          reason={xpNotification.reason}
+          onComplete={() => setXPNotification(null)}
+        />
+      )}
 
       {/* Character Sheet Modal */}
       {showCharacterSheet && selectedCharacter && (

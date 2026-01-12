@@ -1,48 +1,79 @@
+// frontend/src/components/ChatLog.jsx
 export default function ChatLog({ history }) {
   return (
     <div
       style={{
-        border: "1px solid #888",
-        padding: "10px",
-        marginBottom: "10px",
-        maxHeight: "400px",
+        border: "2px solid #444",
+        borderRadius: "8px",
+        padding: "15px",
+        maxHeight: "500px",
         overflowY: "auto",
-        backgroundColor: "#1a1a1a",
-        color: "#eee",
+        backgroundColor: "#0a0a0a",
         fontFamily: "monospace",
-        whiteSpace: "pre-wrap", // keep line breaks
       }}
     >
       {(!history || history.length === 0) && (
-        <p style={{ fontStyle: "italic", color: "#bbb" }}>
+        <p style={{ 
+          fontStyle: "italic", 
+          color: "#666",
+          textAlign: "center",
+          padding: "40px 20px"
+        }}>
           The adventure is about to begin...
         </p>
       )}
 
       {history.map((entry, idx) => {
         const isDM = entry.role === "assistant" || entry.role === "system";
+        const isSystem = entry.role === "system";
 
         return (
           <div
             key={idx}
             style={{
-              marginBottom: "12px",
-              padding: "6px",
-              borderRadius: "6px",
-              backgroundColor: isDM ? "#2c2c2c" : "#333",
-              color: isDM ? "#aaf" : "#afa",
+              marginBottom: "15px",
+              padding: "12px 15px",
+              borderRadius: "8px",
+              backgroundColor: isDM ? "#1a1a1a" : "#2a2a2a",
+              border: `2px solid ${isDM ? "#444" : "#555"}`,
+              borderLeft: `4px solid ${
+                isSystem ? "#ff9800" : 
+                isDM ? "#ffd700" : "#4CAF50"
+              }`,
+              animation: idx === history.length - 1 ? "slideInDown 0.3s ease" : "none"
             }}
           >
-            <strong>{isDM ? "DM" : "Player"}:</strong>{" "}
-            <span
+            <div style={{ 
+              display: "flex", 
+              alignItems: "center",
+              marginBottom: "8px",
+              gap: "8px"
+            }}>
+              <span style={{ 
+                fontSize: "18px" 
+              }}>
+                {isSystem ? "⚙️" : isDM ? "🎭" : "🗣️"}
+              </span>
+              <strong style={{ 
+                color: isSystem ? "#ff9800" : isDM ? "#ffd700" : "#4CAF50",
+                fontSize: "14px",
+                textTransform: "uppercase",
+                letterSpacing: "1px"
+              }}>
+                {isSystem ? "System" : isDM ? "DM" : "Player"}
+              </strong>
+            </div>
+            <div
               style={{
-                display: "block",
-                marginTop: "4px",
-                lineHeight: "1.5",
+                color: "#eee",
+                lineHeight: "1.6",
+                fontSize: "15px",
+                whiteSpace: "pre-wrap",
+                wordBreak: "break-word"
               }}
             >
               {entry.content}
-            </span>
+            </div>
           </div>
         );
       })}
