@@ -3,7 +3,7 @@ import express from "express";
 
 const router = express.Router();
 
-const ELEVENLABS_API_KEY = process.env.ELEVENLABS_API_KEY || "sk_8b508aa9cf4346db31a259ad9bc5bce9dfe18f0b9342f223";
+const ELEVENLABS_API_KEY = process.env.ELEVENLABS_API_KEY || "sk_f8ad078c63b6ff78d3117101c2ac1731c55ff6a301450fa8";
 
 // Expanded voice map with better character voices
 const VOICES = {
