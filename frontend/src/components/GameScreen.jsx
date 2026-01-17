@@ -1,4 +1,4 @@
-// frontend/src/components/GameScreen.jsx
+// frontend/src/components/GameScreen.jsx - COMPLETE WITH ALL FIXES
 import { useState, useEffect, useRef } from "react";
 import { useCampaignStore } from "../state/campaignStore";
 import { playTurn } from "../services/api";
@@ -7,6 +7,8 @@ import { generateSoundEffects } from "../services/soundEffectsApi";
 import { parseNarrative } from "../utils/narrativeParser";
 import { autoSave } from "../services/saveLoadService";
 import { processXPFromNarration, awardXPToParty } from "../utils/xpSystem";
+import { detectScene } from "../utils/musicSceneDetection";
+import { detectLootInNarration, addItemToInventory } from "../utils/inventorySystem";
 import ChatLog from "./ChatLog";
 import DiceRoller from "./DiceRoller";
 import SaveLoadModal from "./SaveLoadModal";
@@ -15,6 +17,38 @@ import LevelUpNotification from "./LevelUpNotification";
 import XPNotification from "./XPNotification";
 import CombatTracker from "./CombatTracker";
 import StartCombatModal from "./StartCombatModal";
+import MusicSystem from "./MusicSystem";
+import InventoryPanel from "./InventoryPanel";
+
+/* ============================
+   Combat Detection Helper
+   ============================ */
+function detectCombatInNarration(narration) {
+  if (!narration) return null;
+  
+  if (narration.includes('**COMBAT_START**')) {
+    return { type: 'start', marker: '**COMBAT_START**' };
+  }
+  
+  if (narration.includes('**COMBAT_END**')) {
+    return { type: 'end', marker: '**COMBAT_END**' };
+  }
+  
+  const lowerText = narration.toLowerCase();
+  const combatStartKeywords = [
+    'attacks you', 'draws their weapon', 'charges at you', 
+    'initiative', 'roll for initiative', 'combat begins',
+    'enemies appear', 'ambush', 'surprise attack'
+  ];
+  
+  const hasCombatStart = combatStartKeywords.some(kw => lowerText.includes(kw));
+  
+  if (hasCombatStart) {
+    return { type: 'start', marker: null };
+  }
+  
+  return null;
+}
 
 export default function GameScreen() {
   // Local state
@@ -28,6 +62,9 @@ export default function GameScreen() {
   const [xpNotification, setXPNotification] = useState(null);
   const [combat, setCombat] = useState(null);
   const [showStartCombat, setShowStartCombat] = useState(false);
+  const [showInventory, setShowInventory] = useState(false);
+  const [activeCharacterInventory, setActiveCharacterInventory] = useState(null);
+  const [lastDiceRoll, setLastDiceRoll] = useState(null);
   
   // Refs
   const audioRef = useRef(null);
@@ -35,6 +72,7 @@ export default function GameScreen() {
   const isPlaying = useRef(false);
   const recognitionRef = useRef(null);
   const silenceTimeoutRef = useRef(null);
+  const musicSystemRef = useRef(null);
 
   // Store state
   const campaign = useCampaignStore((state) => state.campaign);
@@ -50,225 +88,166 @@ export default function GameScreen() {
   const toggleVoice = useCampaignStore((state) => state.toggleVoice);
   const toggleSoundEffects = useCampaignStore((state) => state.toggleSoundEffects || (() => {}));
 
-  /* ============================
-     Speech Recognition (Disabled)
-     ============================ */
   useEffect(() => {
     // Speech recognition disabled
   }, [micListening]);
 
-  /* ============================
-     Audio Queue System
-     ============================ */
   const playAudioQueue = () => {
     if (isPlaying.current || audioQueue.current.length === 0) return;
-
     isPlaying.current = true;
     const audioItem = audioQueue.current.shift();
-
-    if (!audioRef.current) {
-      audioRef.current = new Audio();
-    }
-
+    if (!audioRef.current) audioRef.current = new Audio();
     audioRef.current.src = audioItem.audio;
     audioRef.current.volume = audioItem.volume || 1.0;
-    
     audioRef.current.onended = () => {
-      console.log(`✅ Finished playing ${audioItem.type}`);
       isPlaying.current = false;
       playAudioQueue();
     };
-
-    audioRef.current.onerror = (err) => {
-      console.error("❌ Audio playback error:", err);
+    audioRef.current.onerror = () => {
       isPlaying.current = false;
       playAudioQueue();
     };
-
-    console.log(`🔊 Playing ${audioItem.type}...`);
-    audioRef.current.play().catch(err => {
-      console.error("❌ Failed to play audio:", err);
+    audioRef.current.play().catch(() => {
       isPlaying.current = false;
       playAudioQueue();
     });
   };
 
-  /* ============================
-     Play Background Sound Effects
-     ============================ */
   const playBackgroundSound = (audioData, category) => {
     try {
       const audio = new Audio(audioData);
       audio.volume = 0.3;
       audio.loop = false;
-      
-      console.log(`🎵 Playing background sound: ${category}`);
-      
-      audio.play().catch(err => {
-        console.error("❌ Failed to play background sound:", err);
-      });
-      
-      audio.onended = () => {
-        console.log(`✅ Background sound finished: ${category}`);
-      };
-    } catch (err) {
-      console.error("❌ Background sound error:", err);
-    }
+      audio.play().catch(() => {});
+    } catch (err) {}
   };
 
-  /* ============================
-     Generate and Play Sound Effects
-     ============================ */
   const playSoundEffects = async (text) => {
-    if (!soundEffectsEnabled) {
-      console.log("🔇 Sound effects disabled by user");
-      return;
-    }
-
+    if (!soundEffectsEnabled) return;
     try {
-      console.log("🔊 Requesting sound effects for text...");
       const soundEffects = await generateSoundEffects(text);
-      
-      console.log(`📦 Received ${soundEffects.length} sound effects from backend`);
-      
-      if (soundEffects.length === 0) {
-        console.log("🔇 No sound effects generated for this text");
-        return;
-      }
-
-      soundEffects.forEach(sfx => {
-        console.log(`🎵 Playing background sound: ${sfx.category}`);
-        playBackgroundSound(sfx.audio, sfx.category);
-      });
-
-    } catch (err) {
-      console.error("❌ Failed to play sound effects:", err);
-    }
+      soundEffects.forEach(sfx => playBackgroundSound(sfx.audio, sfx.category));
+    } catch (err) {}
   };
 
-  /* ============================
-     ElevenLabs Voice Generation
-     ============================ */
   const speakWithElevenLabs = async (text, voice = "narrator") => {
-    if (!voiceMode) {
-      console.log("🔇 Voice mode is OFF - skipping narration");
-      return;
-    }
-
+    if (!voiceMode) return;
     try {
       setIsGeneratingVoice(true);
-      console.log(`🎙️ Generating ${voice} voice with ElevenLabs...`);
-      
-      const cleanText = text
-        .replace(/\*\*(.*?)\*\*/g, "$1")
-        .replace(/\*(.*?)\*/g, "$1")
-        .replace(/#{1,6}\s/g, "");
-
+      const cleanText = text.replace(/\*\*(.*?)\*\*/g, "$1").replace(/\*(.*?)\*/g, "$1").replace(/#{1,6}\s/g, "");
       const audioData = await generateVoice({ text: cleanText, voice });
-      
-      audioQueue.current.push({
-        audio: audioData,
-        type: `narration_${voice}`,
-        volume: 1.0
-      });
-
-      if (!isPlaying.current) {
-        playAudioQueue();
-      }
-      
+      audioQueue.current.push({ audio: audioData, type: `narration_${voice}`, volume: 1.0 });
+      if (!isPlaying.current) playAudioQueue();
       setIsGeneratingVoice(false);
     } catch (err) {
-      console.error("❌ Failed to generate voice:", err);
       setIsGeneratingVoice(false);
-      console.log("⚠️ Falling back to browser TTS");
       const utterance = new SpeechSynthesisUtterance(text);
       speechSynthesis.speak(utterance);
     }
   };
 
   const speakAIResponse = async (aiResponse) => {
-    console.log("🎙️ Voice mode:", voiceMode);
-    console.log("📝 AI Response:", aiResponse);
-
-    if (!voiceMode) {
-      console.log("🔇 Voice mode is OFF - skipping narration");
-      return;
-    }
-
-    const fullText = typeof aiResponse === 'string' ? aiResponse : 
-                     Array.isArray(aiResponse) ? aiResponse.map(e => e.text).join(' ') : '';
-    
-    if (soundEffectsEnabled && fullText) {
-      playSoundEffects(fullText);
-    }
-
+    if (!voiceMode) return;
+    const fullText = typeof aiResponse === 'string' ? aiResponse : Array.isArray(aiResponse) ? aiResponse.map(e => e.text).join(' ') : '';
+    if (soundEffectsEnabled && fullText) playSoundEffects(fullText);
     if (Array.isArray(aiResponse)) {
-      console.log("📚 Speaking array of", aiResponse.length, "entries");
       for (const entry of aiResponse) {
-        const voice = entry.description?.toLowerCase().includes("dark") ? "dark" :
-                     entry.description?.toLowerCase().includes("old") ? "old_wise" :
-                     entry.description?.toLowerCase().includes("gruff") ? "gruff" :
-                     "narrator";
+        const voice = entry.description?.toLowerCase().includes("dark") ? "dark" : entry.description?.toLowerCase().includes("old") ? "old_wise" : entry.description?.toLowerCase().includes("gruff") ? "gruff" : "narrator";
         await speakWithElevenLabs(entry.text, voice);
       }
       return;
     }
-
     if (typeof aiResponse === 'string' && aiResponse.trim()) {
-      console.log("📖 Parsing narrative for dialogue...");
       const segments = parseNarrative(aiResponse);
-      console.log(`🎭 Found ${segments.length} segments`);
-      
       for (const segment of segments) {
-        console.log(`  🗣️ ${segment.type} (${segment.voice}): "${segment.text.substring(0, 40)}..."`);
         await speakWithElevenLabs(segment.text, segment.voice);
       }
-      return;
     }
-
-    console.warn("⚠️ Unknown AI response format");
   };
 
-  /* ============================
-     Dice handler
-     ============================ */
   const handleDiceRoll = ({ sides, result }) => {
     console.log("🎲 Rolled d" + sides + ":", result);
+    setLastDiceRoll({ sides, result, timestamp: Date.now() });
     addDiceRoll({ sides, result });
   };
 
-  /* ============================
-     Submit player turn
-     ============================ */
+  const handleOpenInventory = (character) => {
+    setActiveCharacterInventory(character);
+    setShowInventory(true);
+  };
+
+  const handleUpdateCharacterInventory = (updatedChar) => {
+    const updatedParty = party.map(c => c.name === updatedChar.name ? updatedChar : c);
+    updateParty(updatedParty);
+    setActiveCharacterInventory(updatedChar);
+  };
+
+  const handleUpdateInventory = (newInventory) => {
+    if (activeCharacterInventory) {
+      const updatedChar = { ...activeCharacterInventory, inventory: newInventory };
+      handleUpdateCharacterInventory(updatedChar);
+    }
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (!input.trim()) return;
 
-    console.log("🎮 Submitting player action:", input);
+    let enhancedMessage = input;
+    
+    // Include dice roll if recent (within 30 seconds)
+    if (lastDiceRoll && (Date.now() - lastDiceRoll.timestamp) < 30000) {
+      enhancedMessage = `${input} [Player rolled d${lastDiceRoll.sides}: ${lastDiceRoll.result}]`;
+      console.log("🎲 Including dice roll:", lastDiceRoll);
+      setLastDiceRoll(null);
+    }
 
     try {
-      const dmResponse = await playTurn({ message: input, campaign, party });
-      console.log("📨 DM Response received:", dmResponse);
-      
+      const dmResponse = await playTurn({ message: enhancedMessage, campaign, party });
       updateFromDM(dmResponse);
 
       if (dmResponse?.aiResponse && party.length > 0) {
+        // XP Detection
         const xpResult = processXPFromNarration(dmResponse.aiResponse, party);
-        
         if (xpResult) {
-          console.log("🎉 XP Awarded:", xpResult);
-          
           updateParty(xpResult.partyUpdates);
-          
-          setXPNotification({
-            xpGained: xpResult.totalXP,
-            reason: xpResult.message
-          });
-          
+          setXPNotification({ xpGained: xpResult.totalXP, reason: xpResult.message });
           if (xpResult.levelUps.length > 0) {
+            setTimeout(() => setLevelUpData(xpResult.levelUps), 3500);
+          }
+        }
+
+        // Loot Detection
+        const foundLoot = detectLootInNarration(dmResponse.aiResponse);
+        if (foundLoot.length > 0) {
+          const updatedParty = party.map((char, index) => {
+            if (index === 0) {
+              let newInventory = char.inventory || [];
+              foundLoot.forEach(item => {
+                newInventory = addItemToInventory(newInventory, item);
+              });
+              return { ...char, inventory: newInventory };
+            }
+            return char;
+          });
+          updateParty(updatedParty);
+          const itemNames = foundLoot.map(i => i.name).join(', ');
+          setTimeout(() => alert(`📦 Found: ${itemNames}!`), 1000);
+        }
+
+        // Combat Detection
+        const combatDetection = detectCombatInNarration(dmResponse.aiResponse);
+        if (combatDetection) {
+          console.log("⚔️ Combat detected:", combatDetection.type);
+          if (combatDetection.type === 'start' && !combat?.isActive) {
             setTimeout(() => {
-              setLevelUpData(xpResult.levelUps);
-            }, 3500);
+              alert("⚔️ Combat begins! Select your enemies.");
+              setShowStartCombat(true);
+            }, 1500);
+          } else if (combatDetection.type === 'end' && combat?.isActive) {
+            setTimeout(() => {
+              handleEndCombat({ result: 'victory', message: 'Victory! All enemies defeated.', xpReward: 100 });
+            }, 1000);
           }
         }
       }
@@ -276,10 +255,11 @@ export default function GameScreen() {
       autoSave(dmResponse.campaignState, party);
 
       if (dmResponse?.aiResponse) {
-        console.log("🎤 Attempting to speak response...");
         await speakAIResponse(dmResponse.aiResponse);
-      } else {
-        console.warn("⚠️ No aiResponse in DM response");
+        if (musicSystemRef.current) {
+          const scene = detectScene(dmResponse.aiResponse, combat?.isActive || false);
+          if (scene) musicSystemRef.current.playTrack(scene.track);
+        }
       }
 
       setInput("");
@@ -289,17 +269,12 @@ export default function GameScreen() {
   };
 
   const handleLoadCampaign = (loadedCampaign, loadedParty) => {
-    setCampaign({
-      ...loadedCampaign,
-      party: loadedParty
-    });
+    setCampaign({ ...loadedCampaign, party: loadedParty });
     alert("Campaign loaded successfully!");
   };
 
   const handleCharacterUpdate = (updatedCharacter) => {
-    const updatedParty = party.map(char =>
-      char.name === updatedCharacter.name ? updatedCharacter : char
-    );
+    const updatedParty = party.map(char => char.name === updatedCharacter.name ? updatedCharacter : char);
     updateParty(updatedParty);
     setSelectedCharacter(updatedCharacter);
   };
@@ -312,29 +287,29 @@ export default function GameScreen() {
   const handleStartCombat = (newCombat) => {
     setCombat(newCombat);
     setShowStartCombat(false);
-    console.log("⚔️ Combat started!", newCombat);
+    if (musicSystemRef.current) musicSystemRef.current.playTrack('combat_easy');
   };
 
-  const handleUpdateCombat = (updatedCombat) => {
-    setCombat(updatedCombat);
-  };
+  const handleUpdateCombat = (updatedCombat) => setCombat(updatedCombat);
 
   const handleEndCombat = (result) => {
-    console.log("Combat ended:", result);
+    if (musicSystemRef.current) {
+      if (result.result === 'victory') {
+        musicSystemRef.current.playTrack('victory');
+        setTimeout(() => {
+          if (musicSystemRef.current) musicSystemRef.current.playTrack('peaceful_village');
+        }, 8000);
+      } else if (result.result === 'defeat') {
+        musicSystemRef.current.playTrack('defeat');
+      }
+    }
     
     if (result.result === 'victory' && result.xpReward) {
       const xpResult = awardXPToParty(party, result.xpReward, 'Combat Victory');
       updateParty(xpResult.partyUpdates);
-      
-      setXPNotification({
-        xpGained: result.xpReward,
-        reason: 'Combat Victory!'
-      });
-      
+      setXPNotification({ xpGained: result.xpReward, reason: 'Combat Victory!' });
       if (xpResult.levelUps.length > 0) {
-        setTimeout(() => {
-          setLevelUpData(xpResult.levelUps);
-        }, 3500);
+        setTimeout(() => setLevelUpData(xpResult.levelUps), 3500);
       }
     }
     
@@ -352,7 +327,6 @@ export default function GameScreen() {
   return (
     <div style={{ minHeight: '100vh', background: 'linear-gradient(135deg, #0a0a0a 0%, #1a1a1a 100%)' }}>
       <div className="container">
-        {/* Header */}
         <div className="card mb-lg" style={{ marginBottom: '20px' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <div>
@@ -361,99 +335,54 @@ export default function GameScreen() {
                 Difficulty: {campaign.difficulty}
               </p>
             </div>
-            
             <div style={{ display: 'flex', gap: '10px' }}>
-              <button onClick={() => setShowStartCombat(true)} className="btn btn-danger">
-                ⚔️ Combat
-              </button>
-              <button onClick={() => setShowSaveModal(true)} className="btn btn-success">
-                💾 Save
-              </button>
-              <button onClick={() => setShowLoadModal(true)} className="btn btn-info">
-                📂 Load
-              </button>
+              <button onClick={() => setShowStartCombat(true)} className="btn btn-danger">⚔️ Combat</button>
+              <button onClick={() => setShowSaveModal(true)} className="btn btn-success">💾 Save</button>
+              <button onClick={() => setShowLoadModal(true)} className="btn btn-info">📂 Load</button>
             </div>
           </div>
         </div>
 
-        {/* Audio Settings */}
         <div className="card mb-lg">
           <h4 style={{ margin: '0 0 15px 0' }}>🎵 Audio Settings</h4>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
             <label style={{ display: 'flex', alignItems: 'center', gap: '10px', cursor: 'pointer' }}>
-              <input 
-                type="checkbox" 
-                checked={voiceMode} 
-                onChange={toggleVoice}
-              />
+              <input type="checkbox" checked={voiceMode} onChange={toggleVoice} />
               <span>🎙️ Voice Narration {voiceMode ? "ON" : "OFF"}</span>
             </label>
             <label style={{ display: 'flex', alignItems: 'center', gap: '10px', cursor: 'pointer' }}>
-              <input 
-                type="checkbox" 
-                checked={soundEffectsEnabled} 
-                onChange={toggleSoundEffects}
-              />
+              <input type="checkbox" checked={soundEffectsEnabled} onChange={toggleSoundEffects} />
               <span>🔊 Sound Effects {soundEffectsEnabled ? "ON" : "OFF"}</span>
             </label>
-            {isGeneratingVoice && (
-              <div style={{ marginTop: '5px', color: '#888', fontSize: '14px' }}>
-                ⏳ Generating audio...
-              </div>
-            )}
+            {isGeneratingVoice && <div style={{ marginTop: '5px', color: '#888', fontSize: '14px' }}>⏳ Generating audio...</div>}
           </div>
         </div>
 
-        {/* Party */}
         <div className="mb-lg">
           <h3 style={{ marginBottom: '15px' }}>👥 Your Party</h3>
           <div className="grid grid-auto">
             {party.map((c, i) => {
               const hpPercent = (c.hp / c.maxHp) * 100;
               const hpColor = hpPercent > 50 ? '#4CAF50' : hpPercent > 25 ? '#ff9800' : '#f44336';
-              
               return (
-                <div
-                  key={i}
-                  className="card card-hover"
-                  onClick={() => handleViewCharacter(c)}
-                  style={{ cursor: 'pointer' }}
-                >
+                <div key={i} className="card card-hover" onClick={() => handleViewCharacter(c)} style={{ cursor: 'pointer' }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '12px' }}>
                     <div>
                       <h4 style={{ margin: '0 0 5px 0' }}>{c.name}</h4>
-                      <p style={{ margin: 0, fontSize: '13px', color: '#aaa' }}>
-                        Lvl {c.level} {c.race} {c.class}
-                      </p>
+                      <p style={{ margin: 0, fontSize: '13px', color: '#aaa' }}>Lvl {c.level} {c.race} {c.class}</p>
                     </div>
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleViewCharacter(c);
-                      }}
-                      className="btn btn-success btn-sm"
-                    >
-                      📋 Sheet
-                    </button>
+                    <div style={{ display: 'flex', gap: '5px' }}>
+                      <button onClick={(e) => { e.stopPropagation(); handleViewCharacter(c); }} className="btn btn-success btn-sm">📋 Sheet</button>
+                      <button onClick={(e) => { e.stopPropagation(); handleOpenInventory(c); }} className="btn btn-info btn-sm">🎒 Inventory</button>
+                    </div>
                   </div>
-                  
                   <div style={{ marginTop: '12px' }}>
-                    <div style={{ fontSize: '12px', color: '#aaa', marginBottom: '5px' }}>
-                      HP: {c.hp} / {c.maxHp}
-                    </div>
+                    <div style={{ fontSize: '12px', color: '#aaa', marginBottom: '5px' }}>HP: {c.hp} / {c.maxHp}</div>
                     <div className="progress-bar">
-                      <div 
-                        className="progress-fill" 
-                        style={{ width: `${hpPercent}%`, backgroundColor: hpColor }}
-                      />
+                      <div className="progress-fill" style={{ width: `${hpPercent}%`, backgroundColor: hpColor }} />
                     </div>
                   </div>
-
-                  {c.xp !== undefined && (
-                    <div style={{ marginTop: '8px', fontSize: '12px', color: '#888' }}>
-                      XP: {c.xp}
-                    </div>
-                  )}
+                  {c.xp !== undefined && <div style={{ marginTop: '8px', fontSize: '12px', color: '#888' }}>XP: {c.xp}</div>}
                 </div>
               );
             })}
@@ -464,108 +393,35 @@ export default function GameScreen() {
           <DiceRoller onRoll={handleDiceRoll} />
         </div>
 
-        {/* Adventure Log */}
         <div className="card mb-lg">
           <h3 style={{ margin: '0 0 15px 0' }}>📜 Adventure Log</h3>
           <ChatLog history={campaign.history} />
         </div>
 
-        {/* Input */}
         <div className="card">
           <form onSubmit={handleSubmit} style={{ display: 'flex', gap: '10px' }}>
-            <input
-              value={input}
-              onChange={(e) => setInput(e.target.value)}
-              placeholder="What do you do?"
-              className="input"
-              disabled={isGeneratingVoice}
-              style={{ flex: 1 }}
-            />
-            <button 
-              type="submit" 
-              disabled={isGeneratingVoice} 
-              className="btn btn-primary"
-            >
-              Submit
-            </button>
-            <button 
-              type="button"
-              className="btn btn-ghost"
-              disabled={true}
-              title="Speech input is currently disabled"
-              style={{ opacity: 0.5, cursor: 'not-allowed' }}
-            >
-              🎤 Voice
-            </button>
+            <input value={input} onChange={(e) => setInput(e.target.value)} placeholder="What do you do?" className="input" disabled={isGeneratingVoice} style={{ flex: 1 }} />
+            <button type="submit" disabled={isGeneratingVoice} className="btn btn-primary">Submit</button>
           </form>
         </div>
       </div>
 
-      {/* Combat Tracker */}
-      {combat && combat.isActive && (
-        <CombatTracker
-          combat={combat}
-          onUpdate={handleUpdateCombat}
-          onEnd={handleEndCombat}
-        />
+      {combat && combat.isActive && <CombatTracker combat={combat} onUpdate={handleUpdateCombat} onEnd={handleEndCombat} />}
+      {showStartCombat && <StartCombatModal party={party} onStart={handleStartCombat} onClose={() => setShowStartCombat(false)} />}
+      {levelUpData && <LevelUpNotification levelUps={levelUpData} onClose={() => setLevelUpData(null)} />}
+      {xpNotification && <XPNotification xpGained={xpNotification.xpGained} reason={xpNotification.reason} onComplete={() => setXPNotification(null)} />}
+      {showCharacterSheet && selectedCharacter && <CharacterSheet character={selectedCharacter} onUpdate={handleCharacterUpdate} onClose={() => { setShowCharacterSheet(false); setSelectedCharacter(null); }} />}
+      {showInventory && activeCharacterInventory && (
+        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.8)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 5000, padding: '20px', overflow: 'auto' }}>
+          <div style={{ maxWidth: '900px', width: '100%', position: 'relative' }}>
+            <button onClick={() => setShowInventory(false)} style={{ position: 'absolute', top: '-10px', right: '-10px', backgroundColor: '#d32f2f', color: 'white', border: 'none', borderRadius: '50%', width: '40px', height: '40px', fontSize: '20px', cursor: 'pointer', zIndex: 1, boxShadow: '0 4px 8px rgba(0,0,0,0.5)' }}>✕</button>
+            <InventoryPanel character={activeCharacterInventory} inventory={activeCharacterInventory.inventory || []} onUpdateCharacter={handleUpdateCharacterInventory} onUpdateInventory={handleUpdateInventory} />
+          </div>
+        </div>
       )}
-
-      {/* Start Combat Modal */}
-      {showStartCombat && (
-        <StartCombatModal
-          party={party}
-          onStart={handleStartCombat}
-          onClose={() => setShowStartCombat(false)}
-        />
-      )}
-
-      {/* Level-Up Notification */}
-      {levelUpData && (
-        <LevelUpNotification
-          levelUps={levelUpData}
-          onClose={() => setLevelUpData(null)}
-        />
-      )}
-
-      {/* XP Notification */}
-      {xpNotification && (
-        <XPNotification
-          xpGained={xpNotification.xpGained}
-          reason={xpNotification.reason}
-          onComplete={() => setXPNotification(null)}
-        />
-      )}
-
-      {/* Character Sheet Modal */}
-      {showCharacterSheet && selectedCharacter && (
-        <CharacterSheet
-          character={selectedCharacter}
-          onUpdate={handleCharacterUpdate}
-          onClose={() => {
-            setShowCharacterSheet(false);
-            setSelectedCharacter(null);
-          }}
-        />
-      )}
-
-      {/* Save/Load Modals */}
-      <SaveLoadModal
-        isOpen={showSaveModal}
-        onClose={() => setShowSaveModal(false)}
-        mode="save"
-        campaign={campaign}
-        party={party}
-        onLoad={handleLoadCampaign}
-      />
-
-      <SaveLoadModal
-        isOpen={showLoadModal}
-        onClose={() => setShowLoadModal(false)}
-        mode="load"
-        campaign={campaign}
-        party={party}
-        onLoad={handleLoadCampaign}
-      />
+      <SaveLoadModal isOpen={showSaveModal} onClose={() => setShowSaveModal(false)} mode="save" campaign={campaign} party={party} onLoad={handleLoadCampaign} />
+      <SaveLoadModal isOpen={showLoadModal} onClose={() => setShowLoadModal(false)} mode="load" campaign={campaign} party={party} onLoad={handleLoadCampaign} />
+      <MusicSystem ref={musicSystemRef} />
     </div>
   );
 }
