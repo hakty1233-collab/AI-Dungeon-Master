@@ -5,13 +5,13 @@ import { useState, useEffect, useRef, useImperativeHandle, forwardRef } from 're
 const MUSIC_TRACKS = {
   main_menu: {
     name: 'Main Menu Theme',
-    url: '\public\main_menu.mp3',
+    url: '/public/main_menu.mp3',
     volume: 0.3,
     loop: true
   },
   peaceful_village: {
     name: 'Peaceful Village',
-    url: '\public\main_menu.mp3',
+    url: '/public/main_menu.mp3',
     volume: 0.25,
     loop: true
   },
