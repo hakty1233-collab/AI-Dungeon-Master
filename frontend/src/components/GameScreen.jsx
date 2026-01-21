@@ -1,4 +1,4 @@
-// frontend/src/components/GameScreen.jsx - COMPLETE WITH ALL FIXES
+// frontend/src/components/GameScreen.jsx - WITH QUEST SYSTEM
 import { useState, useEffect, useRef } from "react";
 import { useCampaignStore } from "../state/campaignStore";
 import { playTurn } from "../services/api";
@@ -9,6 +9,7 @@ import { autoSave } from "../services/saveLoadService";
 import { processXPFromNarration, awardXPToParty } from "../utils/xpSystem";
 import { detectScene } from "../utils/musicSceneDetection";
 import { detectLootInNarration, addItemToInventory } from "../utils/inventorySystem";
+import { detectQuestEvents } from "../utils/questSystem"; // ⭐ NEW
 import ChatLog from "./ChatLog";
 import DiceRoller from "./DiceRoller";
 import SaveLoadModal from "./SaveLoadModal";
@@ -19,6 +20,7 @@ import CombatTracker from "./CombatTracker";
 import StartCombatModal from "./StartCombatModal";
 import MusicSystem from "./MusicSystem";
 import InventoryPanel from "./InventoryPanel";
+import QuestJournal from "./QuestJournal"; // ⭐ NEW
 
 /* ============================
    Combat Detection Helper
@@ -65,6 +67,7 @@ export default function GameScreen() {
   const [showInventory, setShowInventory] = useState(false);
   const [activeCharacterInventory, setActiveCharacterInventory] = useState(null);
   const [lastDiceRoll, setLastDiceRoll] = useState(null);
+  const [showQuestJournal, setShowQuestJournal] = useState(false); // ⭐ NEW
   
   // Refs
   const audioRef = useRef(null);
@@ -87,6 +90,12 @@ export default function GameScreen() {
   const addDiceRoll = useCampaignStore((state) => state.addDiceRoll);
   const toggleVoice = useCampaignStore((state) => state.toggleVoice);
   const toggleSoundEffects = useCampaignStore((state) => state.toggleSoundEffects || (() => {}));
+  
+  // ⭐ NEW: Quest state
+  const quests = useCampaignStore((state) => state.quests || []);
+  const addQuest = useCampaignStore((state) => state.addQuest);
+  const completeQuestById = useCampaignStore((state) => state.completeQuestById);
+  const updateQuest = useCampaignStore((state) => state.updateQuest);
 
   useEffect(() => {
     // Speech recognition disabled
@@ -235,6 +244,55 @@ export default function GameScreen() {
           setTimeout(() => alert(`📦 Found: ${itemNames}!`), 1000);
         }
 
+        // ⭐ NEW: Quest Detection
+        const questEvents = detectQuestEvents(dmResponse.aiResponse);
+        if (questEvents.length > 0) {
+          console.log("📜 Quest events detected:", questEvents);
+          
+          questEvents.forEach(event => {
+            if (event.type === 'quest_started' && event.quest) {
+              addQuest(event.quest);
+              setTimeout(() => {
+                alert(`📜 New Quest: ${event.quest.title}!\n\n${event.quest.description}`);
+              }, 1000);
+            } else if (event.type === 'quest_completed') {
+              // Try to match with active quests
+              const activeQuest = quests.find(q => q.status === 'active');
+              if (activeQuest) {
+                completeQuestById(activeQuest.id);
+                
+                // Award quest rewards
+                if (activeQuest.rewards.xp > 0) {
+                  const xpResult = awardXPToParty(party, activeQuest.rewards.xp, `Quest: ${activeQuest.title}`);
+                  updateParty(xpResult.partyUpdates);
+                  setXPNotification({ 
+                    xpGained: activeQuest.rewards.xp, 
+                    reason: `Quest Complete: ${activeQuest.title}` 
+                  });
+                  if (xpResult.levelUps.length > 0) {
+                    setTimeout(() => setLevelUpData(xpResult.levelUps), 3500);
+                  }
+                }
+                
+                setTimeout(() => {
+                  alert(`✓ Quest Completed: ${activeQuest.title}!\n\nRewards:\n• ${activeQuest.rewards.xp} XP\n• ${activeQuest.rewards.gold} Gold`);
+                }, 1500);
+              }
+            } else if (event.type === 'quest_updated') {
+              console.log("📝 Quest progress updated");
+            } else if (event.type === 'quest_failed') {
+              const activeQuest = quests.find(q => q.status === 'active');
+              if (activeQuest) {
+                updateQuest(activeQuest.id, { 
+                  status: 'failed',
+                  completedAt: new Date().toISOString()
+                });
+                setTimeout(() => alert(`✗ Quest Failed: ${activeQuest.title}`), 1000);
+              }
+            }
+          });
+        }
+
         // Combat Detection
         const combatDetection = detectCombatInNarration(dmResponse.aiResponse);
         if (combatDetection) {
@@ -324,6 +382,9 @@ export default function GameScreen() {
     </div>
   );
 
+  // ⭐ NEW: Count active quests for button badge
+  const activeQuestCount = quests.filter(q => q.status === 'active').length;
+
   return (
     <div style={{ minHeight: '100vh', background: 'linear-gradient(135deg, #0a0a0a 0%, #1a1a1a 100%)' }}>
       <div className="container">
@@ -335,7 +396,35 @@ export default function GameScreen() {
                 Difficulty: {campaign.difficulty}
               </p>
             </div>
-            <div style={{ display: 'flex', gap: '10px' }}>
+            <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
+              {/* ⭐ NEW: Quest Journal Button */}
+              <button 
+                onClick={() => setShowQuestJournal(true)} 
+                className="btn btn-info"
+                style={{ position: 'relative' }}
+              >
+                📖 Quests
+                {activeQuestCount > 0 && (
+                  <span style={{
+                    position: 'absolute',
+                    top: '-8px',
+                    right: '-8px',
+                    backgroundColor: '#ffd700',
+                    color: '#000',
+                    borderRadius: '50%',
+                    width: '24px',
+                    height: '24px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    fontSize: '12px',
+                    fontWeight: 'bold',
+                    border: '2px solid #1a1a1a'
+                  }}>
+                    {activeQuestCount}
+                  </span>
+                )}
+              </button>
               <button onClick={() => setShowStartCombat(true)} className="btn btn-danger">⚔️ Combat</button>
               <button onClick={() => setShowSaveModal(true)} className="btn btn-success">💾 Save</button>
               <button onClick={() => setShowLoadModal(true)} className="btn btn-info">📂 Load</button>
@@ -406,6 +495,7 @@ export default function GameScreen() {
         </div>
       </div>
 
+      {/* Existing Modals */}
       {combat && combat.isActive && <CombatTracker combat={combat} onUpdate={handleUpdateCombat} onEnd={handleEndCombat} />}
       {showStartCombat && <StartCombatModal party={party} onStart={handleStartCombat} onClose={() => setShowStartCombat(false)} />}
       {levelUpData && <LevelUpNotification levelUps={levelUpData} onClose={() => setLevelUpData(null)} />}
@@ -419,6 +509,17 @@ export default function GameScreen() {
           </div>
         </div>
       )}
+      
+      {/* ⭐ NEW: Quest Journal Modal */}
+      {showQuestJournal && (
+        <QuestJournal
+          quests={quests}
+          onUpdateQuest={updateQuest}
+          onCompleteQuest={completeQuestById}
+          onClose={() => setShowQuestJournal(false)}
+        />
+      )}
+      
       <SaveLoadModal isOpen={showSaveModal} onClose={() => setShowSaveModal(false)} mode="save" campaign={campaign} party={party} onLoad={handleLoadCampaign} />
       <SaveLoadModal isOpen={showLoadModal} onClose={() => setShowLoadModal(false)} mode="load" campaign={campaign} party={party} onLoad={handleLoadCampaign} />
       <MusicSystem ref={musicSystemRef} />

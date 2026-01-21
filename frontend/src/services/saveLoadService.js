@@ -44,6 +44,7 @@ export function saveCampaign(slotId, campaign, party, saveName = null) {
       saveName: saveName || `${campaign.theme} - ${campaign.difficulty}`,
       campaign,
       party,
+      quests,
       lastSaved: new Date().toISOString(),
       playTime: calculatePlayTime(campaign),
       thumbnail: generateThumbnail(campaign),
@@ -82,6 +83,7 @@ export function loadCampaign(slotId) {
     return {
       campaign: saveData.campaign,
       party: saveData.party,
+      quests: saveData.quests || []
     };
   } catch (err) {
     console.error('❌ Failed to load campaign:', err);

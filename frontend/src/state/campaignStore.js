@@ -1,17 +1,29 @@
-// frontend/src/state/campaignStore.js
 import { create } from "zustand";
+
+// ⭐ QUEST SYSTEM IMPORTS
+import { 
+  createQuest, 
+  detectQuestEvents, 
+  completeQuest,
+  updateQuestObjective,
+  addQuestNote,
+  QUEST_STATUS 
+} from "../utils/questSystem";
 
 export const useCampaignStore = create((set) => ({
   campaign: null,
   party: [],
   lastResponse: "",
 
+  // ⭐ QUEST TRACKER
+  quests: [],
+
   // 🧠 MEMORY LAYERS
   worldMemory: [],      // Persistent important facts
   combatState: null,    // Active combat only
 
   voiceMode: true,
-  soundEffectsEnabled: true, // NEW: Sound effects toggle
+  soundEffectsEnabled: true,
   micListening: false,
 
   // 🚀 START / LOAD CAMPAIGN
@@ -32,16 +44,19 @@ export const useCampaignStore = create((set) => ({
       lastResponse: campaign.history?.slice(-1)[0]?.content || "",
       worldMemory: campaign.worldMemory || [],
       combatState: campaign.combatState || null,
+      quests: campaign.quests || [], // ⭐ Load quests if present
     }),
 
   // 👥 UPDATE PARTY
   updateParty: (updatedParty) =>
     set((state) => ({
       party: updatedParty,
-      campaign: state.campaign ? {
-        ...state.campaign,
-        party: updatedParty
-      } : null
+      campaign: state.campaign
+        ? {
+            ...state.campaign,
+            party: updatedParty,
+          }
+        : null,
     })),
 
   // 🎭 DM RESPONSE UPDATE
@@ -68,33 +83,66 @@ export const useCampaignStore = create((set) => ({
         campaignState.combatState !== undefined
           ? campaignState.combatState
           : state.combatState,
+
+      // ⭐ Update quests if DM sends changes
+      quests:
+        campaignState.quests !== undefined
+          ? campaignState.quests
+          : state.quests,
     })),
 
-  // 🧍 PLAYER ACTION (kept local for UI + short-term memory)
+  // 🧍 PLAYER ACTION
   addPlayerMessage: (text) =>
     set((state) => ({
       campaign: {
         ...state.campaign,
         history: [
-          ...(state.campaign.history || []),
+          ...(state.campaign?.history || []),
           { role: "user", content: text },
         ],
       },
     })),
 
-  // 🎲 DICE ROLLS (system-visible but DM-aware)
+  // 🎲 DICE ROLLS
   addDiceRoll: (roll) =>
     set((state) => ({
       campaign: {
         ...state.campaign,
         history: [
-          ...(state.campaign.history || []),
+          ...(state.campaign?.history || []),
           {
             role: "system",
             content: `🎲 Rolled d${roll.sides}: ${roll.result}`,
           },
         ],
       },
+    })),
+
+  // ⭐ QUEST MANAGEMENT
+  addQuest: (questData) =>
+    set((state) => ({
+      quests: [...state.quests, createQuest(questData)],
+    })),
+
+  updateQuest: (questId, updates) =>
+    set((state) => ({
+      quests: state.quests.map((q) =>
+        q.id === questId ? { ...q, ...updates } : q
+      ),
+    })),
+
+  completeQuestById: (questId) =>
+    set((state) => ({
+      quests: state.quests.map((q) =>
+        q.id === questId ? completeQuest(q) : q
+      ),
+    })),
+
+  addQuestNoteById: (questId, note) =>
+    set((state) => ({
+      quests: state.quests.map((q) =>
+        q.id === questId ? addQuestNote(q, note) : q
+      ),
     })),
 
   // 🎤 VOICE CONTROLS
@@ -104,7 +152,7 @@ export const useCampaignStore = create((set) => ({
   toggleVoice: () =>
     set((s) => ({ voiceMode: !s.voiceMode })),
 
-  // 🔊 SOUND EFFECTS CONTROL
+  // 🔊 SOUND EFFECTS
   toggleSoundEffects: () =>
     set((s) => ({ soundEffectsEnabled: !s.soundEffectsEnabled })),
 }));
