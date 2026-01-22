@@ -1,4 +1,4 @@
-// frontend/src/components/GameScreen.jsx - WITH QUEST SYSTEM
+// frontend/src/components/GameScreen.jsx - WITH QUEST SYSTEM AND BESTIARY
 import { useState, useEffect, useRef } from "react";
 import { useCampaignStore } from "../state/campaignStore";
 import { playTurn } from "../services/api";
@@ -9,7 +9,7 @@ import { autoSave } from "../services/saveLoadService";
 import { processXPFromNarration, awardXPToParty } from "../utils/xpSystem";
 import { detectScene } from "../utils/musicSceneDetection";
 import { detectLootInNarration, addItemToInventory } from "../utils/inventorySystem";
-import { detectQuestEvents } from "../utils/questSystem"; // ⭐ NEW
+import { detectQuestEvents } from "../utils/questSystem";
 import ChatLog from "./ChatLog";
 import DiceRoller from "./DiceRoller";
 import SaveLoadModal from "./SaveLoadModal";
@@ -20,7 +20,8 @@ import CombatTracker from "./CombatTracker";
 import StartCombatModal from "./StartCombatModal";
 import MusicSystem from "./MusicSystem";
 import InventoryPanel from "./InventoryPanel";
-import QuestJournal from "./QuestJournal"; // ⭐ NEW
+import QuestJournal from "./QuestJournal";
+import Bestiary from './Bestiary'; // ⭐ NEW
 
 /* ============================
    Combat Detection Helper
@@ -67,7 +68,9 @@ export default function GameScreen() {
   const [showInventory, setShowInventory] = useState(false);
   const [activeCharacterInventory, setActiveCharacterInventory] = useState(null);
   const [lastDiceRoll, setLastDiceRoll] = useState(null);
-  const [showQuestJournal, setShowQuestJournal] = useState(false); // ⭐ NEW
+  const [showQuestJournal, setShowQuestJournal] = useState(false);
+  const [showBestiary, setShowBestiary] = useState(false); // ⭐ NEW
+  const [encounteredEnemies, setEncounteredEnemies] = useState([]); // ⭐ NEW
   
   // Refs
   const audioRef = useRef(null);
@@ -91,7 +94,7 @@ export default function GameScreen() {
   const toggleVoice = useCampaignStore((state) => state.toggleVoice);
   const toggleSoundEffects = useCampaignStore((state) => state.toggleSoundEffects || (() => {}));
   
-  // ⭐ NEW: Quest state
+  // Quest state
   const quests = useCampaignStore((state) => state.quests || []);
   const addQuest = useCampaignStore((state) => state.addQuest);
   const completeQuestById = useCampaignStore((state) => state.completeQuestById);
@@ -244,7 +247,7 @@ export default function GameScreen() {
           setTimeout(() => alert(`📦 Found: ${itemNames}!`), 1000);
         }
 
-        // ⭐ NEW: Quest Detection
+        // Quest Detection
         const questEvents = detectQuestEvents(dmResponse.aiResponse);
         if (questEvents.length > 0) {
           console.log("📜 Quest events detected:", questEvents);
@@ -256,12 +259,10 @@ export default function GameScreen() {
                 alert(`📜 New Quest: ${event.quest.title}!\n\n${event.quest.description}`);
               }, 1000);
             } else if (event.type === 'quest_completed') {
-              // Try to match with active quests
               const activeQuest = quests.find(q => q.status === 'active');
               if (activeQuest) {
                 completeQuestById(activeQuest.id);
                 
-                // Award quest rewards
                 if (activeQuest.rewards.xp > 0) {
                   const xpResult = awardXPToParty(party, activeQuest.rewards.xp, `Quest: ${activeQuest.title}`);
                   updateParty(xpResult.partyUpdates);
@@ -342,9 +343,26 @@ export default function GameScreen() {
     setShowCharacterSheet(true);
   };
 
+  // ⭐ UPDATED: Track encountered enemies
   const handleStartCombat = (newCombat) => {
     setCombat(newCombat);
     setShowStartCombat(false);
+    
+    // Track encountered enemies
+    const newEnemies = newCombat.combatants
+      .filter(c => c.isEnemy)
+      .map(e => {
+        // Extract template name from enemy ID (e.g., "goblin_123456_0" -> "goblin")
+        const idParts = e.id.split('_');
+        return idParts[0];
+      });
+    
+    setEncounteredEnemies(prev => {
+      const unique = [...new Set([...prev, ...newEnemies])];
+      console.log("📖 Encountered enemies:", unique);
+      return unique;
+    });
+    
     if (musicSystemRef.current) musicSystemRef.current.playTrack('combat_easy');
   };
 
@@ -382,7 +400,6 @@ export default function GameScreen() {
     </div>
   );
 
-  // ⭐ NEW: Count active quests for button badge
   const activeQuestCount = quests.filter(q => q.status === 'active').length;
 
   return (
@@ -397,7 +414,7 @@ export default function GameScreen() {
               </p>
             </div>
             <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
-              {/* ⭐ NEW: Quest Journal Button */}
+              {/* Quest Journal Button */}
               <button 
                 onClick={() => setShowQuestJournal(true)} 
                 className="btn btn-info"
@@ -425,6 +442,36 @@ export default function GameScreen() {
                   </span>
                 )}
               </button>
+              
+              {/* ⭐ NEW: Bestiary Button */}
+              <button 
+                onClick={() => setShowBestiary(true)} 
+                className="btn btn-danger"
+                style={{ position: 'relative' }}
+              >
+                📚 Bestiary
+                {encounteredEnemies.length > 0 && (
+                  <span style={{
+                    position: 'absolute',
+                    top: '-8px',
+                    right: '-8px',
+                    backgroundColor: '#ffd700',
+                    color: '#000',
+                    borderRadius: '50%',
+                    width: '24px',
+                    height: '24px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    fontSize: '12px',
+                    fontWeight: 'bold',
+                    border: '2px solid #1a1a1a'
+                  }}>
+                    {encounteredEnemies.length}
+                  </span>
+                )}
+              </button>
+              
               <button onClick={() => setShowStartCombat(true)} className="btn btn-danger">⚔️ Combat</button>
               <button onClick={() => setShowSaveModal(true)} className="btn btn-success">💾 Save</button>
               <button onClick={() => setShowLoadModal(true)} className="btn btn-info">📂 Load</button>
@@ -510,13 +557,21 @@ export default function GameScreen() {
         </div>
       )}
       
-      {/* ⭐ NEW: Quest Journal Modal */}
+      {/* Quest Journal Modal */}
       {showQuestJournal && (
         <QuestJournal
           quests={quests}
           onUpdateQuest={updateQuest}
           onCompleteQuest={completeQuestById}
           onClose={() => setShowQuestJournal(false)}
+        />
+      )}
+      
+      {/* ⭐ NEW: Bestiary Modal */}
+      {showBestiary && (
+        <Bestiary
+          encounteredEnemies={encounteredEnemies}
+          onClose={() => setShowBestiary(false)}
         />
       )}
       

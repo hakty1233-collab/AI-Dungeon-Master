@@ -66,23 +66,46 @@ export function createQuest({
  */
 const QUEST_TRIGGERS = {
   start: [
-    'i need you to', 'i have a task', 'can you help', 'will you',
-    'quest for you', 'job for you', 'mission', 'seek out',
-    'retrieve', 'find', 'deliver', 'investigate', 'defeat',
-    'protect', 'escort', 'gather', 'collect'
+    // Direct requests
+    'i need you to', 'i need your help', 'i have a task', 'can you help', 
+    'will you', 'would you', 'could you help',
+    
+    // Quest language
+    'quest for you', 'job for you', 'mission', 'task', 'favor',
+    
+    // Action verbs
+    'seek out', 'retrieve', 'find', 'deliver', 'investigate', 
+    'defeat', 'protect', 'escort', 'gather', 'collect',
+    'bring me', 'bring us', 'get me', 'fetch',
+    
+    // Help requests
+    'help me', 'help us', 'assist me', 'aid me',
+    
+    // Requests
+    'please', 'if you could', 'i ask you',
+    
+    // Problems
+    'there\'s a problem', 'we have a problem', 'something wrong',
+    'in trouble', 'need assistance'
   ],
+  
   complete: [
     'quest complete', 'well done', 'you succeeded', 'task accomplished',
     'mission accomplished', 'you\'ve done it', 'excellent work',
-    'you have completed', 'objective achieved'
+    'you have completed', 'objective achieved', 'mission complete',
+    'thank you for', 'you did it', 'success', 'completed the'
   ],
+  
   update: [
     'you found', 'you collected', 'you defeated', 'progress',
-    'objective updated', 'one down', 'that\'s one'
+    'objective updated', 'one down', 'that\'s one',
+    'you gathered', 'you retrieved', 'halfway there'
   ],
+  
   fail: [
     'quest failed', 'you failed', 'too late', 'mission failed',
-    'lost forever', 'can no longer'
+    'lost forever', 'can no longer', 'opportunity lost',
+    'failed to', 'time has run out'
   ]
 };
 
@@ -90,22 +113,35 @@ const QUEST_TRIGGERS = {
  * Detect quest events in DM narration
  */
 export function detectQuestEvents(narration) {
+  console.log("🔍 QUEST DETECTION - Analyzing narration:", narration.substring(0, 200) + "...");
+  
   const lowerText = narration.toLowerCase();
   const events = [];
 
   // Check for quest start
+  console.log("🔍 Checking for quest start keywords...");
+  const foundStartTriggers = QUEST_TRIGGERS.start.filter(trigger => lowerText.includes(trigger));
+  console.log("🔍 Found start triggers:", foundStartTriggers);
+  
   if (QUEST_TRIGGERS.start.some(trigger => lowerText.includes(trigger))) {
+    console.log("✅ Quest start trigger detected!");
     const questData = extractQuestFromNarration(narration);
+    console.log("📜 Extracted quest data:", questData);
+    
     if (questData) {
       events.push({
         type: 'quest_started',
         quest: questData
       });
+      console.log("✅ Quest event created!");
+    } else {
+      console.log("❌ Quest data extraction failed");
     }
   }
 
   // Check for quest completion
   if (QUEST_TRIGGERS.complete.some(trigger => lowerText.includes(trigger))) {
+    console.log("✅ Quest completion trigger detected!");
     events.push({
       type: 'quest_completed',
       keywords: QUEST_TRIGGERS.complete.filter(t => lowerText.includes(t))
@@ -114,6 +150,7 @@ export function detectQuestEvents(narration) {
 
   // Check for quest updates
   if (QUEST_TRIGGERS.update.some(trigger => lowerText.includes(trigger))) {
+    console.log("✅ Quest update trigger detected!");
     events.push({
       type: 'quest_updated',
       keywords: QUEST_TRIGGERS.update.filter(t => lowerText.includes(t))
@@ -122,12 +159,14 @@ export function detectQuestEvents(narration) {
 
   // Check for quest failure
   if (QUEST_TRIGGERS.fail.some(trigger => lowerText.includes(trigger))) {
+    console.log("✅ Quest failure trigger detected!");
     events.push({
       type: 'quest_failed',
       keywords: QUEST_TRIGGERS.fail.filter(t => lowerText.includes(t))
     });
   }
 
+  console.log("🎯 Total quest events found:", events.length);
   return events;
 }
 
