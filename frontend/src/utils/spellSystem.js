@@ -761,10 +761,13 @@ export function longRest(character) {
     ...character,
     spellSlots: {
       max: spellSlots,
-      current: [...spellSlots]   }
+      current: [...spellSlots]}
   };
 }
 
+/**
+ * Prepare spells (for prepared casters like Clerics, Wizards)
+ */
 export function prepareSpells(character, spellKeys) {
   const spellcastingAbility = getSpellcastingAbility(character.class);
   const modifier = Math.floor((character.abilities[spellcastingAbility] - 10) / 2);
