@@ -1,4 +1,4 @@
-// frontend/src/components/CharacterSheet.jsx
+// frontend/src/components/CharacterSheet.jsx - FIXED FOR STATUS EFFECTS
 import { useState } from "react";
 import { 
   getModifier, 
@@ -305,7 +305,7 @@ function SkillsTab({ character }) {
   );
 }
 
-// Combat Tab
+// Combat Tab - FIXED
 function CombatTab({ character }) {
   return (
     <div>
@@ -324,21 +324,54 @@ function CombatTab({ character }) {
         />
       </div>
 
-      {character.conditions.length > 0 && (
+      {/* Status Effects - FIXED */}
+      {character.conditions && character.conditions.length > 0 && (
         <>
-          <h3 style={{ color: '#ffd700', marginTop: '30px' }}>Conditions</h3>
+          <h3 style={{ color: '#ffd700', marginTop: '30px' }}>Status Effects</h3>
           <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
-            {character.conditions.map((condition, i) => (
-              <span key={i} style={{
-                backgroundColor: '#d32f2f',
-                padding: '8px 16px',
-                borderRadius: '20px',
-                fontSize: '14px',
-                fontWeight: 'bold'
-              }}>
-                {condition}
+            {character.conditions.map((condition) => (
+              <span 
+                key={condition.id} 
+                style={{
+                  backgroundColor: condition.color || '#9C27B0',
+                  padding: '8px 16px',
+                  borderRadius: '20px',
+                  fontSize: '14px',
+                  fontWeight: 'bold',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '5px'
+                }}
+              >
+                {condition.icon} {condition.name}
+                {condition.stackCount > 1 && ` x${condition.stackCount}`}
               </span>
             ))}
+          </div>
+        </>
+      )}
+
+      {/* Exhaustion */}
+      {character.exhaustion > 0 && (
+        <>
+          <h3 style={{ color: '#ffd700', marginTop: '30px' }}>Exhaustion</h3>
+          <div style={{
+            padding: '15px',
+            backgroundColor: '#2a2a2a',
+            borderRadius: '8px',
+            border: '2px solid #616161'
+          }}>
+            <div style={{ fontSize: '18px', fontWeight: 'bold', color: '#616161', marginBottom: '10px' }}>
+              Level {character.exhaustion}
+            </div>
+            <div style={{ fontSize: '14px', color: '#ccc' }}>
+              {character.exhaustion >= 1 && <div>• Disadvantage on ability checks</div>}
+              {character.exhaustion >= 2 && <div>• Speed halved</div>}
+              {character.exhaustion >= 3 && <div>• Disadvantage on attacks and saves</div>}
+              {character.exhaustion >= 4 && <div>• HP maximum halved</div>}
+              {character.exhaustion >= 5 && <div>• Speed reduced to 0</div>}
+              {character.exhaustion >= 6 && <div style={{ color: '#f44336' }}>• Death</div>}
+            </div>
           </div>
         </>
       )}
