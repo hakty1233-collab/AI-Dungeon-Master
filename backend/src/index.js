@@ -1,11 +1,8 @@
 // backend/src/index.js
 import express from "express";
 import cors from "cors";
-import dotenv from "dotenv";
 import dmRoutes from "./routes/dm.js";
 import voiceRoutes from "./routes/voice.js";
-
-dotenv.config();
 
 const app = express();
 const PORT = process.env.PORT || 3001;
