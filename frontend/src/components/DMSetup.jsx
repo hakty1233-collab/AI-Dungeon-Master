@@ -23,35 +23,25 @@ export default function DMSetup() {
   };
 
   const handleStart = async () => {
-  if (party.length === 0) {
-    alert("Please create at least one character!");
-    return;
-  }
-
-  console.log("Starting campaign...");
-  try {
-    const campaignState = await startCampaign({ theme, difficulty, party });
-    console.log("Backend returned:", campaignState);
-
-    if (!campaignState) {
-      throw new Error("No campaign state returned from server");
+    if (party.length === 0) {
+      alert("Please create at least one character!");
+      return;
     }
 
-    setCampaign(campaignState);
-    navigate("/play");
-  } catch (err) {
-    console.error("❌ Failed to start campaign:", err);
-    
-    // More specific error messages
-    if (err.message?.includes("401")) {
-      alert("⚠️ API Key Error: The Groq API key is invalid or expired. Please update it in Railway settings.");
-    } else if (err.message?.includes("Network")) {
-      alert("⚠️ Network Error: Cannot connect to backend. Is the server running?");
-    } else {
-      alert(`Failed to start campaign: ${err.message || "Unknown error"}\n\nCheck console for details.`);
+    console.log("Starting campaign...");
+    try {
+      const campaignState = await startCampaign({ theme, difficulty, party });
+      console.log("Backend returned:", campaignState);
+
+      setCampaign(campaignState);
+
+      // Navigate to GameScreen
+      navigate("/play");
+    } catch (err) {
+      console.error("Failed to start campaign:", err);
+      alert("Failed to start campaign. Check console for details.");
     }
-  }
-};
+  };
 
   return (
     <div style={{
