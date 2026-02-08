@@ -13,7 +13,7 @@ const PORT = process.env.PORT || 3001;
 const corsOptions = {
   origin: [
     'http://localhost:3000',  // Local development
-    'frontend-git-main-hakty1233-collabs-projects.vercel.app'  // Production Vercel
+    /^https:\/\/.*-hakty1233-collabs-projects\.vercel\.app$/  // All Vercel preview URLs
   ],
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization'],
