@@ -17,7 +17,7 @@ const VOICES = {
   epic: "pNInz6obpgDQGcFmaJgB", // Adam - epic narrator
 };
 
-router.post("/voice", async (req, res) => {
+router.post("/", async (req, res) => {
   try {
     const { text, voice = "narrator" } = req.body;
 
