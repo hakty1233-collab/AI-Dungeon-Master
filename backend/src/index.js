@@ -24,8 +24,13 @@ const corsOptions = {
 // Apply CORS middleware
 app.use(cors(corsOptions));
 
-// ✅ CRITICAL FIX: Explicit OPTIONS handler for preflight requests
-app.options('*', cors(corsOptions));
+// ✅ FIX for Express 5: Use middleware instead of app.options('*', ...)
+app.use((req, res, next) => {
+  if (req.method === 'OPTIONS') {
+    return cors(corsOptions)(req, res, next);
+  }
+  next();
+});
 
 // Body parser middleware
 app.use(express.json({ limit: '50mb' }));
