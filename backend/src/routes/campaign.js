@@ -6,7 +6,7 @@ import { runDM } from "../dm/dmEngine.js";
 const router = express.Router();
 
 // Start a new campaign
-router.post("/", async (req, res) => {
+router.post("/start-campaign", async (req, res) => {
   try {
     const { theme, difficulty, party } = req.body;
 
