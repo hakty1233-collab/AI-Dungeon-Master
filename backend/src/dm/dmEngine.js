@@ -2,7 +2,7 @@
 import OpenAI from "openai";
 
 const groqClient = new OpenAI({
-  apiKey: "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", // Replace with your key
+  apiKey: "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", // Replace with your key
   baseURL: "https://api.groq.com/openai/v1",
 });
 

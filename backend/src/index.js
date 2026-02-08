@@ -1,8 +1,10 @@
 // backend/src/index.js
 import express from "express";
 import cors from "cors";
-import dmRoutes from "./routes/dm.js";
+import campaignRoutes from "./routes/campaign.js";
+import turnRoutes from "./routes/turn.js";
 import voiceRoutes from "./routes/voice.js";
+import soundEffectsRoutes from "./routes/soundEffects.js";
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -39,9 +41,10 @@ app.get('/', (req, res) => {
 });
 
 // API Routes
-app.use('/start-campaign', dmRoutes);
-app.use('/dm-action', dmRoutes);
+app.use('/start-campaign', campaignRoutes);
+app.use('/turn', turnRoutes);
 app.use('/voice', voiceRoutes);
+app.use('/sound-effects', soundEffectsRoutes);
 
 // Error handling middleware
 app.use((err, req, res, next) => {
