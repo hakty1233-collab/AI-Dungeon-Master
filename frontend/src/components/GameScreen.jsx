@@ -32,6 +32,7 @@ import Bestiary from './Bestiary';
 import SpellBook from './SpellBook';
 import StatusEffectsPanel from './StatusEffectsPanel';
 import ApplyStatusEffectModal from './ApplyStatusEffectModal';
+import PatreonButton from "./PatreonButton";
 
 /* ============================
    Combat Detection Helper
@@ -719,6 +720,7 @@ export default function GameScreen() {
       <SaveLoadModal isOpen={showSaveModal} onClose={() => setShowSaveModal(false)} mode="save" campaign={campaign} party={party} onLoad={handleLoadCampaign} />
       <SaveLoadModal isOpen={showLoadModal} onClose={() => setShowLoadModal(false)} mode="load" campaign={campaign} party={party} onLoad={handleLoadCampaign} />
       <MusicSystem ref={musicSystemRef} />
+      <PatreonButton position="fixed" />
     </div>
   );
 }

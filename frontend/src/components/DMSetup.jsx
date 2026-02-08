@@ -4,6 +4,7 @@ import { useNavigate } from "react-router-dom";
 import { useCampaignStore } from "../state/campaignStore";
 import { startCampaign } from "../services/api";
 import CharacterCreator from "./CharacterCreator";
+import PatreonButton from "./PatreonButton";
 
 export default function DMSetup() {
   const [theme, setTheme] = useState("Dark Fantasy");
@@ -308,6 +309,7 @@ export default function DMSetup() {
           onCancel={() => setShowCharacterCreator(false)}
         />
       )}
+      <PatreonButton position="fixed" />
     </div>
   );
 }
