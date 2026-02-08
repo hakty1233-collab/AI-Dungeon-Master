@@ -5,7 +5,7 @@ import { runDM } from "../dm/dmEngine.js";
 const router = express.Router();
 
 // Player takes a turn
-router.post("/turn", async (req, res) => {
+router.post("/", async (req, res) => {
   try {
     const { message, campaign, party } = req.body;
 
