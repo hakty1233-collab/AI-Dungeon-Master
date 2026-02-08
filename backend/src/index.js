@@ -13,7 +13,7 @@ const PORT = process.env.PORT || 3001;
 const corsOptions = {
   origin: [
     'http://localhost:3000',  // Local development
-    'https://ai-dungeon-master-sepia.vercel.app'  // Production Vercel
+    'frontend-py0e6z0hy-hakty1233-collabs-projects.vercel.app'  // Production Vercel
   ],
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization'],
