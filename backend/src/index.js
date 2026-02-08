@@ -9,12 +9,35 @@ import soundEffectsRoutes from "./routes/soundEffects.js";
 const app = express();
 const PORT = process.env.PORT || 3001;
 
-// ✅ CRITICAL FIX: Proper CORS configuration for Railway + Vercel
+// ✅ CORS configuration with explicit origin validation
 const corsOptions = {
-  origin: [
-    'http://localhost:3000',  // Local development
-    /^https:\/\/.*-hakty1233-collabs-projects\.vercel\.app$/  // All Vercel preview URLs
-  ],
+  origin: function (origin, callback) {
+    // Allow requests with no origin (like mobile apps or curl)
+    if (!origin) return callback(null, true);
+    
+    // Define allowed origins
+    const allowedOrigins = [
+      'http://localhost:3000',
+      /^https:\/\/.*-hakty1233-collabs-projects\.vercel\.app$/
+    ];
+    
+    // Check if origin matches any allowed pattern
+    const isAllowed = allowedOrigins.some(pattern => {
+      if (typeof pattern === 'string') {
+        return pattern === origin;
+      } else if (pattern instanceof RegExp) {
+        return pattern.test(origin);
+      }
+      return false;
+    });
+    
+    if (isAllowed) {
+      callback(null, true);
+    } else {
+      console.log('❌ CORS blocked origin:', origin);
+      callback(new Error('Not allowed by CORS'));
+    }
+  },
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization'],
   credentials: true,
