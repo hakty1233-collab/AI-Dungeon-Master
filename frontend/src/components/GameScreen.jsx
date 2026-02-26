@@ -1,4 +1,4 @@
-// frontend/src/components/GameScreen.jsx - WITH QUEST SYSTEM, BESTIARY, SPELLS, STATUS EFFECTS, AND SHOP
+// frontend/src/components/GameScreen.jsx - WITH QUEST SYSTEM, BESTIARY, SPELLS, STATUS EFFECTS, SHOP, AND LEVEL UP
 import { useState, useEffect, useRef } from "react";
 import { useCampaignStore } from "../state/campaignStore";
 import { playTurn } from "../services/api";
@@ -22,7 +22,7 @@ import ChatLog from "./ChatLog";
 import DiceRoller from "./DiceRoller";
 import SaveLoadModal from "./SaveLoadModal";
 import CharacterSheet from "./CharacterSheet";
-import LevelUpNotification from "./LevelUpNotification";
+import LevelUpModal from "./LevelUpModal";
 import XPNotification from "./XPNotification";
 import CombatTracker from "./CombatTracker";
 import StartCombatModal from "./StartCombatModal";
@@ -108,7 +108,9 @@ export default function GameScreen() {
   const [showLoadModal, setShowLoadModal] = useState(false);
   const [selectedCharacter, setSelectedCharacter] = useState(null);
   const [showCharacterSheet, setShowCharacterSheet] = useState(false);
-  const [levelUpData, setLevelUpData] = useState(null);
+  // ── Level Up: queue-based so multiple characters level up one at a time ──
+  const [levelUpQueue, setLevelUpQueue] = useState([]);
+  const activeLevelUp = levelUpQueue[0] || null;
   const [xpNotification, setXPNotification] = useState(null);
   const [combat, setCombat] = useState(null);
   const [showStartCombat, setShowStartCombat] = useState(false);
@@ -265,6 +267,15 @@ export default function GameScreen() {
     setStatusEffectTarget(null);
   };
 
+  // ── Level Up: apply choices and advance the queue ──
+  const handleLevelUpComplete = (updatedCharacter) => {
+    const updatedParty = party.map(c =>
+      c.name === updatedCharacter.name ? updatedCharacter : c
+    );
+    updateParty(updatedParty);
+    setLevelUpQueue(prev => prev.slice(1));
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (!input.trim()) return;
@@ -287,7 +298,12 @@ export default function GameScreen() {
           updateParty(xpResult.partyUpdates);
           setXPNotification({ xpGained: xpResult.totalXP, reason: xpResult.message });
           if (xpResult.levelUps.length > 0) {
-            setTimeout(() => setLevelUpData(xpResult.levelUps), 3500);
+            setTimeout(() => {
+              setLevelUpQueue(xpResult.levelUps.map(lu => ({
+                ...lu.character.pendingLevelUp,
+                characterName: lu.name,
+              })));
+            }, 3000);
           }
         }
 
@@ -347,7 +363,15 @@ export default function GameScreen() {
                   updateParty(xpResult.partyUpdates);
                   setXPNotification({ xpGained: activeQuest.rewards.xp, reason: `Quest Complete: ${activeQuest.title}` });
                   if (xpResult.levelUps.length > 0) {
-                    setTimeout(() => setLevelUpData(xpResult.levelUps), 3500);
+                    setTimeout(() => {
+                      setLevelUpQueue(prev => [
+                        ...prev,
+                        ...xpResult.levelUps.map(lu => ({
+                          ...lu.character.pendingLevelUp,
+                          characterName: lu.name,
+                        }))
+                      ]);
+                    }, 3000);
                   }
                 }
                 setTimeout(() => { alert(`✓ Quest Completed: ${activeQuest.title}!\n\nRewards:\n• ${activeQuest.rewards.xp} XP\n• ${activeQuest.rewards.gold} Gold`); }, 1500);
@@ -447,7 +471,15 @@ export default function GameScreen() {
       updateParty(xpResult.partyUpdates);
       setXPNotification({ xpGained: result.xpReward, reason: 'Combat Victory!' });
       if (xpResult.levelUps.length > 0) {
-        setTimeout(() => setLevelUpData(xpResult.levelUps), 3500);
+        setTimeout(() => {
+          setLevelUpQueue(prev => [
+            ...prev,
+            ...xpResult.levelUps.map(lu => ({
+              ...lu.character.pendingLevelUp,
+              characterName: lu.name,
+            }))
+          ]);
+        }, 3000);
       }
     }
     setCombat(null);
@@ -494,7 +526,6 @@ export default function GameScreen() {
                 )}
               </button>
 
-              {/* 🏪 Shop Button — always visible, opens last detected merchant or a travelling merchant */}
               <button
                 onClick={() => {
                   if (!activeMerchant) setActiveMerchant(createMerchant(MERCHANT_TYPES.GENERAL, 'Travelling Merchant'));
@@ -628,7 +659,21 @@ export default function GameScreen() {
       {/* ── Modals ── */}
       {combat && combat.isActive && <CombatTracker combat={combat} onUpdate={handleUpdateCombat} onEnd={handleEndCombat} party={party} updateParty={updateParty} />}
       {showStartCombat && <StartCombatModal party={party} onStart={handleStartCombat} onClose={() => setShowStartCombat(false)} />}
-      {levelUpData && <LevelUpNotification levelUps={levelUpData} onClose={() => setLevelUpData(null)} />}
+
+      {/* ── Level Up Modal — queue-based, one character at a time ── */}
+      {activeLevelUp && (() => {
+        const char = party.find(c => c.name === activeLevelUp.characterName);
+        if (!char) return null;
+        return (
+          <LevelUpModal
+            levelUpData={activeLevelUp}
+            character={char}
+            onComplete={handleLevelUpComplete}
+            onClose={() => setLevelUpQueue(prev => prev.slice(1))}
+          />
+        );
+      })()}
+
       {xpNotification && <XPNotification xpGained={xpNotification.xpGained} reason={xpNotification.reason} onComplete={() => setXPNotification(null)} />}
       {showCharacterSheet && selectedCharacter && <CharacterSheet character={selectedCharacter} onUpdate={handleCharacterUpdate} onClose={() => { setShowCharacterSheet(false); setSelectedCharacter(null); }} />}
 
