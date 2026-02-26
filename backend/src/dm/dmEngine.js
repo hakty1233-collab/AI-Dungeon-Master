@@ -1,232 +1,498 @@
-// backend/src/dm/dmEngine.js - Enhanced with inventory tracking and combat detection
+// backend/src/dm/dmEngine.js
 import OpenAI from "openai";
 
 const groqClient = new OpenAI({
-  apiKey: "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", // Replace with your key
+  apiKey: process.env.GROQ_API_KEY,
   baseURL: "https://api.groq.com/openai/v1",
 });
 
+// ─────────────────────────────────────────────────────────────────────────────
+//  WORLD MEMORY HELPERS
+// ─────────────────────────────────────────────────────────────────────────────
+
 /**
- * Build enhanced system prompt with inventory and combat awareness
+ * Initialise or migrate worldMemory to structured format.
+ * Old format: string[]
+ * New format: { npcs: [], locations: [], events: [], facts: [], sessionSummary: '' }
  */
+function normaliseWorldMemory(worldMemory) {
+  if (!worldMemory) {
+    return { npcs: [], locations: [], events: [], facts: [], sessionSummary: '' };
+  }
+  // Already structured
+  if (typeof worldMemory === 'object' && !Array.isArray(worldMemory)) {
+    return {
+      npcs:           worldMemory.npcs           || [],
+      locations:      worldMemory.locations       || [],
+      events:         worldMemory.events          || [],
+      facts:          worldMemory.facts           || [],
+      sessionSummary: worldMemory.sessionSummary  || ''
+    };
+  }
+  // Legacy flat array — migrate to facts bucket
+  if (Array.isArray(worldMemory)) {
+    return {
+      npcs: [], locations: [], events: [],
+      facts: worldMemory.filter(Boolean).slice(0, 30),
+      sessionSummary: ''
+    };
+  }
+  return { npcs: [], locations: [], events: [], facts: [], sessionSummary: '' };
+}
+
+/**
+ * Merge AI-supplied worldMemoryUpdates into structured memory.
+ * Deduplicates by name/content. Caps each bucket to prevent unbounded growth.
+ */
+function mergeWorldMemory(existing, updates) {
+  if (!updates) return existing;
+
+  const mem = { ...existing };
+
+  // NPCs: deduplicate by name
+  if (updates.npcs?.length) {
+    updates.npcs.forEach(npc => {
+      if (!npc?.name) return;
+      const idx = mem.npcs.findIndex(n => n.name?.toLowerCase() === npc.name.toLowerCase());
+      if (idx !== -1) {
+        mem.npcs[idx] = { ...mem.npcs[idx], ...npc }; // Update existing
+      } else {
+        mem.npcs.push(npc);
+      }
+    });
+    mem.npcs = mem.npcs.slice(-20); // Keep latest 20
+  }
+
+  // Locations: deduplicate by name
+  if (updates.locations?.length) {
+    updates.locations.forEach(loc => {
+      if (!loc?.name) return;
+      const idx = mem.locations.findIndex(l => l.name?.toLowerCase() === loc.name.toLowerCase());
+      if (idx !== -1) {
+        mem.locations[idx] = { ...mem.locations[idx], ...loc };
+      } else {
+        mem.locations.push(loc);
+      }
+    });
+    mem.locations = mem.locations.slice(-15);
+  }
+
+  // Events: append-only, keep latest 20
+  if (updates.events?.length) {
+    updates.events.forEach(ev => {
+      if (ev && !mem.events.includes(ev)) mem.events.push(ev);
+    });
+    mem.events = mem.events.slice(-20);
+  }
+
+  // Facts: append-only, deduplicate, keep latest 30
+  if (updates.facts?.length) {
+    updates.facts.forEach(f => {
+      if (f && !mem.facts.includes(f)) mem.facts.push(f);
+    });
+    mem.facts = mem.facts.slice(-30);
+  }
+
+  return mem;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  PARTY STATE FORMATTING
+// ─────────────────────────────────────────────────────────────────────────────
+
+function formatPartyForPrompt(party) {
+  if (!party?.length) return 'No party members.';
+
+  return party.map(p => {
+    const lines = [];
+    lines.push(`### ${p.name} — Level ${p.level} ${p.race} ${p.class}${p.subclass ? ` (${p.subclass})` : ''}`);
+    lines.push(`HP: ${p.hp}/${p.maxHp} | AC: ${p.armorClass || 10} | XP: ${p.xp || 0}`);
+
+    // Ability scores
+    if (p.abilities || p.abilityScores) {
+      const ab = p.abilities || p.abilityScores;
+      const mods = Object.entries(ab).map(([k, v]) => {
+        const mod = Math.floor((v - 10) / 2);
+        return `${k} ${v}(${mod >= 0 ? '+' : ''}${mod})`;
+      }).join(', ');
+      lines.push(`Stats: ${mods}`);
+    }
+
+    // Equipped items
+    const eq = p.equippedItems || {};
+    const equipped = [];
+    if (eq.weapon) equipped.push(`Weapon: ${eq.weapon.name} (${eq.weapon.damage})`);
+    if (eq.armor)  equipped.push(`Armor: ${eq.armor.name} (AC ${eq.armor.ac})`);
+    if (eq.shield) equipped.push(`Shield: ${eq.shield.name}`);
+    if (equipped.length) lines.push(equipped.join(' | '));
+
+    // Spell slots
+    if (p.spellSlots?.current) {
+      const slots = p.spellSlots.current
+        .map((n, i) => n > 0 ? `L${i + 1}:${n}` : null)
+        .filter(Boolean);
+      if (slots.length) {
+        lines.push(`Spell Slots: ${slots.join(', ')}`);
+      }
+      if (p.concentrationSpell) {
+        lines.push(`Concentrating on: ${p.concentrationSpell}`);
+      }
+    }
+
+    // Pact magic (Warlock)
+    if (p.pactSlots) {
+      lines.push(`Pact Slots: ${p.pactSlots.current}/${p.pactSlots.max} (Level ${p.pactSlots.level})`);
+    }
+
+    // Status effects / conditions
+    const conditions = p.conditions || p.statusEffects || [];
+    if (conditions.length) {
+      const condNames = conditions.map(c =>
+        typeof c === 'string' ? c : (c.name || c.type || JSON.stringify(c))
+      ).join(', ');
+      lines.push(`⚠️ Conditions: ${condNames}`);
+    }
+
+    // Gold
+    const gold = (p.inventory || []).find(i => i.id === 'gold');
+    if (gold?.quantity > 0) lines.push(`Gold: ${gold.quantity} gp`);
+
+    // Key inventory items (skip gold)
+    const items = (p.inventory || [])
+      .filter(i => i.id !== 'gold')
+      .slice(0, 8)
+      .map(i => i.quantity > 1 ? `${i.name} ×${i.quantity}` : i.name)
+      .join(', ');
+    if (items) lines.push(`Inventory: ${items}`);
+
+    return lines.join('\n');
+  }).join('\n\n');
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  PROMPT BUILDER
+// ─────────────────────────────────────────────────────────────────────────────
+
 function buildDMPrompt(campaign) {
   const {
-    theme,
-    difficulty,
-    party = [],
-    worldMemory = [],
+    theme       = 'Fantasy',
+    difficulty  = 'Normal',
+    party       = [],
+    worldMemory,
     combatState = null,
-    history = [],
+    history     = [],
+    sessionSummary = ''
   } = campaign;
 
-  // Format party with inventory
-  const partyInfo = party.map(p => {
-    const inventory = p.inventory || [];
-    const equippedItems = p.equippedItems || {};
-    
-    let charInfo = `- ${p.name} (Level ${p.level} ${p.race} ${p.class})
-  HP: ${p.hp}/${p.maxHp}
-  AC: ${p.armorClass || 10}`;
+  const mem = normaliseWorldMemory(worldMemory);
 
-    if (equippedItems.weapon) {
-      charInfo += `\n  Weapon: ${equippedItems.weapon.name} (${equippedItems.weapon.damage})`;
-    }
-    if (equippedItems.armor) {
-      charInfo += `\n  Armor: ${equippedItems.armor.name} (AC ${equippedItems.armor.ac})`;
-    }
-    if (inventory.length > 0) {
-      const items = inventory.slice(0, 10).map(item => 
-        item.quantity > 1 ? `${item.name} (x${item.quantity})` : item.name
-      ).join(', ');
-      charInfo += `\n  Inventory: ${items}${inventory.length > 10 ? '...' : ''}`;
-    }
+  // Format structured world memory
+  const npcBlock = mem.npcs.length
+    ? mem.npcs.map(n => `- ${n.name}${n.race ? ` (${n.race})` : ''}${n.disposition ? ` [${n.disposition}]` : ''}${n.notes ? `: ${n.notes}` : ''}`).join('\n')
+    : '- None yet';
 
-    return charInfo;
-  }).join("\n\n");
+  const locationBlock = mem.locations.length
+    ? mem.locations.map(l => `- ${l.name}${l.description ? `: ${l.description}` : ''}`).join('\n')
+    : '- None yet';
 
-  return `
-You are a master Dungeon Master running a tabletop RPG with VOICE NARRATION.
+  const eventBlock = mem.events.length
+    ? mem.events.slice(-8).map(e => `- ${e}`).join('\n')
+    : '- None yet';
+
+  const factBlock = mem.facts.length
+    ? mem.facts.slice(-10).map(f => `- ${f}`).join('\n')
+    : '- None yet';
+
+  // Recent conversation (last 12 turns verbatim)
+  const recentHistory = history.slice(-12)
+    .map(h => `${h.role === 'user' ? '🧑 PLAYER' : h.role === 'assistant' ? '🎲 DM' : 'SYSTEM'}: ${h.content}`)
+    .join('\n\n');
+
+  // Older session summary (if any)
+  const summaryBlock = (mem.sessionSummary || sessionSummary)
+    ? `SESSION SUMMARY (earlier events):\n${mem.sessionSummary || sessionSummary}`
+    : '';
+
+  return `You are an expert, immersive Dungeon Master running a ${theme} tabletop RPG campaign with VOICE NARRATION.
 
 CAMPAIGN
 Theme: ${theme}
-Difficulty: ${difficulty}
+Difficulty: ${difficulty} — ${difficultyGuidance(difficulty)}
 
-PARTY STATUS
-${partyInfo}
+════════════════════════════════════
+PARTY — CURRENT STATE
+════════════════════════════════════
+${formatPartyForPrompt(party)}
 
-WORLD MEMORY (persistent facts only):
-${worldMemory.length ? worldMemory.map(m => `- ${m}`).join("\n") : "- None"}
+════════════════════════════════════
+WORLD MEMORY
+════════════════════════════════════
+KNOWN NPCs:
+${npcBlock}
 
-COMBAT STATE:
-${combatState ? JSON.stringify(combatState) : "No active combat"}
+KNOWN LOCATIONS:
+${locationBlock}
 
-RECENT EVENTS (context only):
-${history.slice(-6).map(h => `${h.role.toUpperCase()}: ${h.content}`).join("\n")}
+KEY EVENTS (recent first):
+${eventBlock}
 
-VOICE NARRATION GUIDELINES:
-- When characters speak, describe their voice BEFORE the dialogue
-- Use descriptive words like: gravelly, gruff, raspy, old, young, dark, sinister, cheerful, booming
-- Format dialogue clearly with quotation marks
-- Example: "The old wizard's voice trembles as he speaks, 'You must find the crystal.'"
+WORLD FACTS:
+${factBlock}
+
+════════════════════════════════════
+COMBAT STATE
+════════════════════════════════════
+${combatState ? JSON.stringify(combatState, null, 2) : 'No active combat.'}
+
+════════════════════════════════════
+CONVERSATION HISTORY
+════════════════════════════════════
+${summaryBlock}
+
+RECENT TURNS:
+${recentHistory || 'Campaign is just beginning.'}
+
+════════════════════════════════════
+DUNGEON MASTER INSTRUCTIONS
+════════════════════════════════════
+PARTY AWARENESS — You MUST:
+- Reference character names, not "you" alone — "Thorin swings his axe..." not just "you attack"
+- Acknowledge HP levels: characters near death should feel it in the narration
+- Reference equipped weapons/armor in combat descriptions
+- Acknowledge active conditions (poisoned, frightened, etc.) and their effects
+- Reference spell slots when characters cast — note when they're running low
+- Mention gold when relevant (purchases, rewards, bribes)
+- Remember what items the party has and reference them naturally
+
+WORLD CONTINUITY — You MUST:
+- Reference established NPCs by name and personality
+- Remember locations the party has visited
+- Build on past events in your narration
+- Keep NPC dispositions consistent (a hostile merchant stays hostile)
+
+VOICE NARRATION — Format dialogue for voice:
+- Describe character voice BEFORE their dialogue
+- Use voice descriptors: gravelly, lilting, trembling, booming, raspy, cheerful, sinister
+- Example: "The old innkeeper's voice cracks with fear, 'They came in the night...'"
 
 COMBAT DETECTION:
-- When enemies appear or combat begins, include "**COMBAT_START**" in your narration
-- When all enemies are defeated, include "**COMBAT_END**" in your narration
-- Examples:
-  * "Three goblins emerge from the shadows! **COMBAT_START**"
-  * "The bandits draw their weapons and attack! **COMBAT_START**"
-  * "The last orc falls to the ground. **COMBAT_END**"
+- When enemies appear/combat begins → include "**COMBAT_START**" in narration
+- When all enemies defeated → include "**COMBAT_END**" in narration
 
-ITEM AWARENESS:
-- The party's inventory is listed above - remember what they have
-- When they use items, acknowledge their effects
-- Example: If they have a healing potion and use it, narrate its effect
-- If they find treasure, describe what they discover (the system will auto-add items)
+MERCHANT DETECTION:
+- When the party enters a shop or meets a merchant → include "**SHOP**" in narration
 
-DICE ROLL INTEGRATION:
-- When the player mentions rolling dice (e.g., "I rolled a 15"), incorporate the result
-- Example: "With a roll of 15, you successfully pick the lock..."
-- Higher rolls = better outcomes, lower rolls = worse outcomes
+DICE ROLLS:
+- When player mentions a dice roll result, incorporate it meaningfully
+- High rolls (15+) = success with flair; Low rolls (1-5) = failure with consequence; Mid rolls = partial success
 
-ABSOLUTE RULES:
-- Respond ONLY in valid JSON
-- NO markdown backticks
-- NO extra text before or after JSON
-- NO explanations outside the JSON
-- JSON MUST match this exact schema:
+RESPONSE LENGTH:
+- Normal exploration: 3-5 sentences of vivid narration
+- Combat turns: 2-3 sentences, punchy and immediate
+- Major story moments: up to 8 sentences
+- Never pad with filler — every sentence should advance the scene
+
+════════════════════════════════════
+JSON RESPONSE SCHEMA
+════════════════════════════════════
+Respond ONLY with valid JSON. No markdown, no backticks, no text outside the JSON.
 
 {
-  "narration": "Your narrative text here (include **COMBAT_START** or **COMBAT_END** when appropriate)",
-  "worldMemoryUpdates": [],
-  "combatState": null,
-  "partyUpdates": []
+  "narration": "Your narrative text here. Include **COMBAT_START**, **COMBAT_END**, or **SHOP** markers when appropriate.",
+  "worldMemoryUpdates": {
+    "npcs": [
+      { "name": "NPC Name", "race": "Human", "disposition": "friendly|neutral|hostile|unknown", "notes": "brief description" }
+    ],
+    "locations": [
+      { "name": "Location Name", "description": "brief description" }
+    ],
+    "events": [
+      "One-sentence description of a significant event that just occurred"
+    ],
+    "facts": [
+      "A persistent world fact worth remembering"
+    ]
+  },
+  "partyUpdates": [
+    {
+      "name": "Character Name",
+      "hpDelta": 0,
+      "conditions": [],
+      "goldDelta": 0,
+      "notes": "optional DM note about this character"
+    }
+  ],
+  "combatState": null
 }
 
-CRITICAL: Your ENTIRE response must be ONLY the JSON object. Nothing else.
+RULES:
+- worldMemoryUpdates: only include things that are NEW or CHANGED — omit unchanged npcs/locations
+- partyUpdates: only include characters who changed this turn — use hpDelta (+ heal, - damage), goldDelta
+- conditions: full list of current conditions for this character if changed, otherwise omit the field
+- combatState: null unless you are managing a specific combat state object
+- ENTIRE response must be ONLY the JSON object. Nothing else.
 `;
 }
 
-/**
- * Safe JSON parser
- */
+function difficultyGuidance(difficulty) {
+  const guides = {
+    'Easy':     'Enemies are weak, traps are obvious, NPCs are helpful. Reward creative solutions generously.',
+    'Normal':   'Balanced challenge. Standard D&D 5e difficulty. Fair but consequential.',
+    'Hard':     'Enemies are tactical, traps are deadly, resources matter. Players should feel real danger.',
+    'Deadly':   'Ruthless. Permadeath possible. Every decision has weight. No mercy.'
+  };
+  return guides[difficulty] || guides['Normal'];
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  JSON PARSER
+// ─────────────────────────────────────────────────────────────────────────────
+
 function safeParseDMResponse(text) {
   try {
     console.log("📥 Raw DM response length:", text?.length);
-    
-    // Remove markdown code blocks if present
+
     let cleanText = text.trim();
+    // Strip markdown code fences
     if (cleanText.startsWith('```')) {
       cleanText = cleanText.replace(/```json\s*/g, '').replace(/```\s*/g, '');
     }
-    
-    // Find JSON object
-    const start = cleanText.indexOf("{");
-    const end = cleanText.lastIndexOf("}");
-    
-    if (start === -1 || end === -1) {
-      console.error("❌ No JSON found in response");
-      throw new Error("No JSON object found");
-    }
 
-    const jsonStr = cleanText.slice(start, end + 1);
-    const parsed = JSON.parse(jsonStr);
-    
-    // Validate required fields
-    if (!parsed.narration) {
-      console.error("❌ Missing narration field");
-      throw new Error("Missing narration field");
-    }
-    
+    const start = cleanText.indexOf("{");
+    const end   = cleanText.lastIndexOf("}");
+
+    if (start === -1 || end === -1) throw new Error("No JSON object found");
+
+    const parsed = JSON.parse(cleanText.slice(start, end + 1));
+
+    if (!parsed.narration) throw new Error("Missing narration field");
+
     console.log("✅ Parsed DM response successfully");
-    
     return parsed;
   } catch (err) {
     console.error("❌ DM JSON parse failed:", err.message);
-
     return {
       narration: "The world shimmers uncertainly. The Dungeon Master gathers their thoughts...",
-      worldMemoryUpdates: [],
-      combatState: null,
+      worldMemoryUpdates: {},
       partyUpdates: [],
+      combatState: null
     };
   }
 }
 
-/**
- * MAIN DM ENGINE
- */
+// ─────────────────────────────────────────────────────────────────────────────
+//  PARTY UPDATE APPLICATION
+// ─────────────────────────────────────────────────────────────────────────────
+
+function applyPartyUpdates(party, updates) {
+  if (!updates?.length) return party;
+
+  return party.map(char => {
+    const update = updates.find(u => u.name?.toLowerCase() === char.name?.toLowerCase());
+    if (!update) return char;
+
+    let updated = { ...char };
+
+    // HP delta
+    if (update.hpDelta && update.hpDelta !== 0) {
+      updated.hp = Math.max(0, Math.min(char.maxHp, char.hp + update.hpDelta));
+      console.log(`[DM] ${char.name} HP: ${char.hp} → ${updated.hp} (delta: ${update.hpDelta})`);
+    }
+
+    // Gold delta
+    if (update.goldDelta && update.goldDelta !== 0) {
+      const inventory = updated.inventory || [];
+      const goldIdx   = inventory.findIndex(i => i.id === 'gold');
+      if (goldIdx !== -1) {
+        const newQty = Math.max(0, inventory[goldIdx].quantity + update.goldDelta);
+        updated.inventory = inventory.map((item, i) =>
+          i === goldIdx ? { ...item, quantity: newQty } : item
+        );
+      } else if (update.goldDelta > 0) {
+        updated.inventory = [...inventory, {
+          id: 'gold', name: 'Gold Coins', type: 'misc',
+          weight: 0, value: 1, stackable: true,
+          instanceId: `gold_${Date.now()}`,
+          quantity: update.goldDelta, equipped: false
+        }];
+      }
+      console.log(`[DM] ${char.name} gold delta: ${update.goldDelta}`);
+    }
+
+    // Conditions (full replacement if provided)
+    if (Array.isArray(update.conditions)) {
+      updated.conditions = update.conditions;
+    }
+
+    // DM note (for debugging/display)
+    if (update.notes) {
+      console.log(`[DM] Note for ${char.name}: ${update.notes}`);
+    }
+
+    return updated;
+  });
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  MAIN DM ENGINE
+// ─────────────────────────────────────────────────────────────────────────────
+
 export async function runDM({ campaign, playerMessage }) {
   console.log("\n🎮 === DM ENGINE START ===");
-  console.log("Player message:", playerMessage);
-  
+  console.log("Player message:", playerMessage?.substring(0, 80));
+
   const systemPrompt = buildDMPrompt(campaign);
 
   try {
-    console.log("🤖 Calling Groq API...");
-    
+    console.log("🤖 Calling Groq API (llama-3.3-70b-versatile)...");
+
     const response = await groqClient.chat.completions.create({
-      model: "llama-3.3-70b-versatile",
-      temperature: 0.9,
-      max_tokens: 1000,
+      model:       "llama-3.3-70b-versatile",
+      temperature: 0.85,
+      max_tokens:  1200,
       messages: [
         { role: "system", content: systemPrompt },
-        { role: "user", content: playerMessage },
-      ],
+        { role: "user",   content: playerMessage }
+      ]
     });
 
     console.log("📡 Groq API response received");
 
     const rawText = response.choices?.[0]?.message?.content || "";
-    
-    if (!rawText) {
-      console.error("❌ Empty response from Groq");
-      throw new Error("Empty response from API");
-    }
-    
+    if (!rawText) throw new Error("Empty response from API");
+
     console.log("📥 Response length:", rawText.length);
-    
+
     const parsed = safeParseDMResponse(rawText);
 
-    // 🧠 Merge world memory
-    const updatedWorldMemory = [
-      ...(campaign.worldMemory || []),
-      ...(parsed.worldMemoryUpdates || []),
-    ];
+    // Merge world memory
+    const existingMem    = normaliseWorldMemory(campaign.worldMemory);
+    const updatedMem     = mergeWorldMemory(existingMem, parsed.worldMemoryUpdates);
 
-    // 🧍 Apply party updates
-    const updatedParty = campaign.party.map((p) => {
-      const update = parsed.partyUpdates?.find(u => u.name === p.name);
-      if (!update) return p;
-
-      return {
-        ...p,
-        hp: Math.max(0, p.hp + (update.hp || 0)),
-        status: update.status || p.status,
-      };
-    });
+    // Apply party updates
+    const updatedParty   = applyPartyUpdates(campaign.party || [], parsed.partyUpdates);
 
     const result = {
       aiResponse: parsed.narration,
       campaignState: {
         ...campaign,
-        party: updatedParty,
-        worldMemory: updatedWorldMemory,
-        combatState: parsed.combatState,
-      },
+        party:       updatedParty,
+        worldMemory: updatedMem,
+        combatState: parsed.combatState !== undefined ? parsed.combatState : campaign.combatState
+      }
     };
 
     console.log("✅ DM Engine complete");
+    console.log("📚 World memory — NPCs:", updatedMem.npcs.length, "| Locations:", updatedMem.locations.length, "| Events:", updatedMem.events.length);
     console.log("🎮 === DM ENGINE END ===\n");
 
     return result;
 
   } catch (err) {
-    console.error("❌ Groq DM error:", err);
-    console.error("Error message:", err.message);
-
+    console.error("❌ Groq DM error:", err.message);
     return {
-      aiResponse: "The world shimmers uncertainly. The Dungeon Master gathers their thoughts... (An error occurred: " + err.message + ")",
-      campaignState: campaign,
+      aiResponse: `The world shimmers uncertainly... (${err.message})`,
+      campaignState: campaign
     };
   }
 }

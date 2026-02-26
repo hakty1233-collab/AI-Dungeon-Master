@@ -1,6 +1,6 @@
+// frontend/src/state/campaignStore.js
 import { create } from "zustand";
 
-// ⭐ QUEST SYSTEM IMPORTS
 import { 
   createQuest, 
   detectQuestEvents, 
@@ -18,9 +18,12 @@ export const useCampaignStore = create((set) => ({
   // ⭐ QUEST TRACKER
   quests: [],
 
+  // 🏪 ACTIVE MERCHANT (null when no shop is open)
+  activeMerchant: null,
+
   // 🧠 MEMORY LAYERS
-  worldMemory: [],      // Persistent important facts
-  combatState: null,    // Active combat only
+  worldMemory: [],
+  combatState: null,
 
   voiceMode: true,
   soundEffectsEnabled: true,
@@ -33,30 +36,21 @@ export const useCampaignStore = create((set) => ({
         ...campaign,
         history: campaign.history?.length
           ? campaign.history
-          : [
-              {
-                role: "assistant",
-                content: "The air grows still as your adventure begins...",
-              },
-            ],
+          : [{ role: "assistant", content: "The air grows still as your adventure begins..." }],
       },
       party: campaign.party || [],
       lastResponse: campaign.history?.slice(-1)[0]?.content || "",
       worldMemory: campaign.worldMemory || [],
       combatState: campaign.combatState || null,
-      quests: campaign.quests || [], // ⭐ Load quests if present
+      quests: campaign.quests || [],
+      activeMerchant: null,
     }),
 
   // 👥 UPDATE PARTY
   updateParty: (updatedParty) =>
     set((state) => ({
       party: updatedParty,
-      campaign: state.campaign
-        ? {
-            ...state.campaign,
-            party: updatedParty,
-          }
-        : null,
+      campaign: state.campaign ? { ...state.campaign, party: updatedParty } : null,
     })),
 
   // 🎭 DM RESPONSE UPDATE
@@ -69,26 +63,11 @@ export const useCampaignStore = create((set) => ({
           { role: "assistant", content: aiResponse },
         ],
       },
-
       lastResponse: aiResponse,
       party: campaignState.party || state.party,
-
-      // 🧠 Persist smarter memory
-      worldMemory:
-        campaignState.worldMemory !== undefined
-          ? campaignState.worldMemory
-          : state.worldMemory,
-
-      combatState:
-        campaignState.combatState !== undefined
-          ? campaignState.combatState
-          : state.combatState,
-
-      // ⭐ Update quests if DM sends changes
-      quests:
-        campaignState.quests !== undefined
-          ? campaignState.quests
-          : state.quests,
+      worldMemory: campaignState.worldMemory !== undefined ? campaignState.worldMemory : state.worldMemory,
+      combatState: campaignState.combatState !== undefined ? campaignState.combatState : state.combatState,
+      quests: campaignState.quests !== undefined ? campaignState.quests : state.quests,
     })),
 
   // 🧍 PLAYER ACTION
@@ -110,10 +89,7 @@ export const useCampaignStore = create((set) => ({
         ...state.campaign,
         history: [
           ...(state.campaign?.history || []),
-          {
-            role: "system",
-            content: `🎲 Rolled d${roll.sides}: ${roll.result}`,
-          },
+          { role: "system", content: `🎲 Rolled d${roll.sides}: ${roll.result}` },
         ],
       },
     })),
@@ -126,33 +102,31 @@ export const useCampaignStore = create((set) => ({
 
   updateQuest: (questId, updates) =>
     set((state) => ({
-      quests: state.quests.map((q) =>
-        q.id === questId ? { ...q, ...updates } : q
-      ),
+      quests: state.quests.map((q) => q.id === questId ? { ...q, ...updates } : q),
     })),
 
   completeQuestById: (questId) =>
     set((state) => ({
-      quests: state.quests.map((q) =>
-        q.id === questId ? completeQuest(q) : q
-      ),
+      quests: state.quests.map((q) => q.id === questId ? completeQuest(q) : q),
     })),
 
   addQuestNoteById: (questId, note) =>
     set((state) => ({
-      quests: state.quests.map((q) =>
-        q.id === questId ? addQuestNote(q, note) : q
-      ),
+      quests: state.quests.map((q) => q.id === questId ? addQuestNote(q, note) : q),
     })),
 
+  // 🏪 MERCHANT MANAGEMENT
+  setActiveMerchant: (merchant) =>
+    set({ activeMerchant: merchant }),
+
+  updateActiveMerchant: (merchant) =>
+    set({ activeMerchant: merchant }),
+
+  clearActiveMerchant: () =>
+    set({ activeMerchant: null }),
+
   // 🎤 VOICE CONTROLS
-  toggleMic: () =>
-    set((s) => ({ micListening: !s.micListening })),
-
-  toggleVoice: () =>
-    set((s) => ({ voiceMode: !s.voiceMode })),
-
-  // 🔊 SOUND EFFECTS
-  toggleSoundEffects: () =>
-    set((s) => ({ soundEffectsEnabled: !s.soundEffectsEnabled })),
+  toggleMic: () => set((s) => ({ micListening: !s.micListening })),
+  toggleVoice: () => set((s) => ({ voiceMode: !s.voiceMode })),
+  toggleSoundEffects: () => set((s) => ({ soundEffectsEnabled: !s.soundEffectsEnabled })),
 }));

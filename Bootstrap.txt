@@ -1,390 +1,438 @@
-# AI Dungeon Master - Project Context & State
-
-## 🎮 Project Overview
-A fully-featured AI Dungeon Master for D&D 5e with voice narration, combat system, character progression, and save/load functionality.
-
----
-
-## 🏗️ Tech Stack
-- **Frontend**: React (Create React App)
-- **Backend**: Node.js + Express
-- **AI Models**: 
-  - Groq API (Llama 3.3 70B) for DM narration
-  - ElevenLabs API for voice synthesis (model: `eleven_turbo_v2_5`)
-- **State Management**: Zustand
-- **Routing**: React Router
+# 🎮 AI DUNGEON MASTER — MASTER BOOTSTRAP DOCUMENT
+> **Last Updated:** February 2026 | **Status:** ✅ Fully Deployed & Operational  
+> **Purpose:** Complete handoff document — paste this at the start of every new AI session
 
 ---
 
-## 📁 Project Structure
+## 🔗 LIVE DEPLOYMENT URLS
 
-```
-AI-Dungeon-Master/
-├── backend/
-│   ├── src/
-│   │   ├── dm/
-│   │   │   ├── dmEngine.js (DM AI logic, Groq integration)
-│   │   │   └── systemPrompt.js
-│   │   ├── routes/
-│   │   │   ├── campaign.js (POST /start-campaign)
-│   │   │   ├── turn.js (POST /turn)
-│   │   │   ├── voice.js (POST /voice - ElevenLabs)
-│   │   │   └── soundEffects.js (POST /sound-effects)
-│   │   └── index.js (Express server on port 3001)
-│   └── .env (ElevenLabs API key)
-├── frontend/
-│   ├── src/
-│   │   ├── components/
-│   │   │   ├── GameScreen.jsx (main game UI)
-│   │   │   ├── DMSetup.jsx (campaign setup)
-│   │   │   ├── CharacterCreator.jsx (4-step character wizard)
-│   │   │   ├── CharacterSheet.jsx (full D&D character sheet)
-│   │   │   ├── CombatTracker.jsx (turn-based combat UI)
-│   │   │   ├── StartCombatModal.jsx (enemy selection)
-│   │   │   ├── SaveLoadModal.jsx (save/load campaigns)
-│   │   │   ├── LevelUpNotification.jsx (level-up animation)
-│   │   │   ├── XPNotification.jsx (XP toast)
-│   │   │   ├── ChatLog.jsx (adventure log)
-│   │   │   └── DiceRoller.jsx (dice rolling UI)
-│   │   ├── utils/
-│   │   │   ├── characterSystem.js (D&D 5e character mechanics)
-│   │   │   ├── combatSystem.js (initiative, attacks, damage)
-│   │   │   ├── xpSystem.js (XP detection & awarding)
-│   │   │   └── narrativeParser.js (dialogue/voice detection)
-│   │   ├── services/
-│   │   │   ├── api.js (backend API calls)
-│   │   │   ├── voiceApi.js (ElevenLabs voice)
-│   │   │   ├── soundEffectsApi.js (ElevenLabs SFX)
-│   │   │   └── saveLoadService.js (localStorage save/load)
-│   │   ├── state/
-│   │   │   └── campaignStore.js (Zustand global state)
-│   │   └── styles/
-│   │       └── global.css (unified theme - NEEDS TO BE CREATED)
-└── launcher.bat (Windows launcher)
-```
+| Service | URL | Platform |
+|---|---|---|
+| **Frontend** | https://ai-dungeon-master-sepia.vercel.app | Vercel |
+| **Backend** | https://ai-dungeon-master-production-91c0.up.railway.app | Railway |
+| **Repository** | GitHub — `AI-Dungeon-Master` (main branch) | GitHub |
 
 ---
 
-## ✅ Completed Features
+## 🔑 ENVIRONMENT VARIABLES (CRITICAL — KEEP UPDATED)
 
-### **Core Systems**
-1. ✅ **Campaign Management**
-   - Theme and difficulty selection
-   - Party creation and management
-   - Campaign state persistence
-
-2. ✅ **Character System (Full D&D 5e)**
-   - 12 classes (Barbarian, Bard, Cleric, Druid, Fighter, Monk, Paladin, Ranger, Rogue, Sorcerer, Warlock, Wizard)
-   - 9 races (Human, Elf, Dwarf, Halfling, Dragonborn, Gnome, Half-Elf, Half-Orc, Tiefling)
-   - Point-buy ability score system (27 points)
-   - Full character sheets with stats, skills, saves
-   - Character creator wizard (4 steps)
-
-3. ✅ **XP & Leveling System**
-   - Automatic XP detection from narration
-   - XP awards for: combat (25-5900 XP), puzzles (50 XP), quests (150 XP), discoveries (100 XP)
-   - Automatic level-up with HP increases
-   - Epic level-up animation with sparkles
-   - XP toast notifications
-
-4. ✅ **Combat System**
-   - Initiative tracking with automatic rolls
-   - Turn-based combat flow
-   - Enemy templates (Goblin, Skeleton, Orc, Bugbear, Ogre, Troll, Young Dragon)
-   - Attack rolls (d20 + bonus vs AC)
-   - Damage rolls with critical hits (natural 20)
-   - Fumbles (natural 1)
-   - Auto enemy AI turns
-   - Combat log
-   - XP rewards on victory
-
-5. ✅ **Voice & Audio**
-   - ElevenLabs voice narration with multiple voices:
-     - narrator (Rachel - default)
-     - gruff (Josh - warriors)
-     - old_wise (Bella - elders)
-     - young (Elli - children)
-     - dark (Domi - villains)
-   - Dynamic character voice selection based on description
-   - Narrative parsing for dialogue
-   - Sound effect detection (birds, wind, combat, etc.)
-   - Background sound effects during narration
-
-6. ✅ **Save/Load System**
-   - Multiple save slots
-   - Auto-save after each turn
-   - Save metadata (timestamp, play time, preview)
-   - Export/import saves as JSON
-   - Delete saves
-
-7. ✅ **Dice Rolling**
-   - d4, d6, d8, d10, d12, d20
-   - Visual feedback
-   - Integration with combat
-
----
-
-## 🔑 API Keys & Configuration
-
-### Backend (.env)
-```
+### Railway (Backend)
+```env
+GROQ_API_KEY=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
 ELEVENLABS_API_KEY=sk_8b508aa9cf4346db31a259ad9bc5bce9dfe18f0b9342f223
+PORT=3001
 ```
 
-### APIs Used
-1. **Groq API** (in dmEngine.js)
-   - API Key: `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`
-   - Model: `llama-3.3-70b-versatile`
-   - Base URL: `https://api.groq.com/openai/v1`
+### Vercel (Frontend)
+```env
+REACT_APP_API_URL=https://ai-dungeon-master-production-91c0.up.railway.app
+```
 
-2. **ElevenLabs API**
-   - Voice Model: `eleven_turbo_v2_5` (free tier)
-   - ⚠️ OLD MODEL `eleven_monolingual_v1` is deprecated
+> ⚠️ **GROQ API KEYS EXPIRE PERIODICALLY.** If the AI stops responding, get a fresh key from https://console.groq.com and update it in Railway dashboard → Variables.
 
 ---
 
-## 🎨 Current UI State
+## 🏗️ COMPLETE TECH STACK
 
-### **Working But Needs Unification:**
-- ✅ GameScreen - partially updated
-- ⚠️ CombatTracker - functional but styling inconsistent
-- ⚠️ StartCombatModal - functional but needs polish
-- ⚠️ CharacterSheet - functional but could be prettier
-- ⚠️ CharacterCreator - functional but styling could match
-- ⚠️ SaveLoadModal - functional but needs theme update
-- ⚠️ DMSetup - needs significant styling update
+### Backend — Railway (Node.js)
+| Component | Detail |
+|---|---|
+| Runtime | Node.js 18+ |
+| Framework | Express.js v5.2.1 |
+| AI Model | Groq API → Llama 3.3 70B |
+| Voice Synthesis | ElevenLabs (`eleven_turbo_v2_5`) |
+| Sound Effects | ElevenLabs ambient sounds |
+| Port | 3001 |
 
-### **Theme Created But Not Applied:**
-- Created `global.css` with unified dark fantasy theme
-- Gold (#ffd700) primary color
-- Dark red (#d32f2f) for combat/danger
-- Dark backgrounds (#0a0a0a, #1a1a1a, #2a2a2a)
-- Consistent card, button, input styles
-- Smooth animations and transitions
-
----
-
-## 🐛 Known Issues & Quirks
-
-1. **Browser Speech Recognition**
-   - Disabled because it's unreliable across browsers
-   - Was causing infinite loop issues
-   - Left as disabled button in UI
-
-2. **State Variable Patterns**
-   - React useState declarations sometimes don't apply from artifacts
-   - Need to manually add state variables then hard refresh
-   - Example: `const [combat, setCombat] = useState(null);`
-
-3. **Zustand Store Pattern**
-   - Must extract store functions individually: `const func = useStore(state => state.func)`
-   - Can't destructure multiple at once reliably
-
-4. **Sound Effects**
-   - ElevenLabs sound generation API works but uses quota
-   - Currently generates max 2 sound effects per narration
-   - Plays at 30% volume as background ambient
+### Frontend — Vercel (React)
+| Component | Detail |
+|---|---|
+| Framework | React 18 (Create React App) |
+| State Management | Zustand |
+| Routing | React Router |
+| HTTP Client | Axios |
+| Styling | Custom CSS (dark fantasy theme — gold accents, dark backgrounds) |
 
 ---
 
-## 🚀 Immediate Next Steps
+## 📁 COMPLETE FILE MAP
 
-### **Phase 1: UI Unification** (30-60 min)
-1. Create `frontend/src/styles/global.css`
-2. Import in `frontend/src/index.js`
-3. Update components to use unified classes:
-   - CombatTracker.jsx
-   - StartCombatModal.jsx
-   - CharacterSheet.jsx
-   - CharacterCreator.jsx
-   - SaveLoadModal.jsx
-   - DMSetup.jsx
+### Backend Files
+```
+backend/
+├── src/
+│   ├── dm/
+│   │   └── dmEngine.js          ⭐ Groq AI prompt builder — CORE AI LOGIC
+│   └── routes/
+│       └── voice.js             ⭐ ElevenLabs voice — MUST use eleven_turbo_v2_5
+```
 
-### **Phase 2: Choose Next Feature**
-Options (in priority order):
-1. **Background Music** 🎵 - Easy, huge impact
-2. **Inventory System** 🎒 - Medium, core RPG feature
-3. **Quest System** 📜 - Medium, adds structure
-4. **Map System** 🗺️ - Medium-Hard, exploration depth
+### Frontend Files
+```
+frontend/src/
+├── components/
+│   ├── GameScreen.jsx           ⭐ MAIN GAME UI — ALL systems integrated here
+│   ├── CombatTracker.jsx        ⭐ Turn-based combat, initiative, status effects
+│   ├── CharacterSheet.jsx       ⭐ Full character display, Combat tab fixed
+│   ├── SpellBook.jsx            ⭐ Spell management UI
+│   ├── StatusEffectsPanel.jsx   ✅ NEW — Display (full & compact views)
+│   └── ApplyStatusEffectModal.jsx ✅ NEW — Manual status effect application UI
+├── state/
+│   └── campaignStore.js         ⭐ Zustand store — central state
+├── utils/
+│   ├── combatSystem.js          ⭐ 50+ enemies, damage calculation
+│   ├── spellSystem.js           ⭐ 50+ spells, spell slots, spell logic
+│   ├── statusEffectSystem.js    ✅ NEW — 20+ D&D 5e conditions, core logic
+│   ├── xpSystem.js              ⭐ XP auto-detection from narration
+│   ├── inventorySystem.js       ⭐ Loot auto-detection, weight
+│   └── questSystem.js           ⭐ Quest auto-detection from narration
+```
 
 ---
 
-## 📝 Important Code Patterns
+## ✅ COMPLETE FEATURE LIST — ALL WORKING
 
-### **Adding State to GameScreen:**
+### Core Systems
+1. **Campaign Management** — Theme/difficulty selection, party setup wizard
+2. **Character System** — Full D&D 5e: 12 classes, 9 races, point-buy stats
+3. **Combat System** — Turn-based, initiative order, AI enemy turns, 50+ enemy types
+4. **XP & Leveling** — Auto-detection from narration, levels 1–20, epic level-up animations
+5. **Inventory System** — Equipment slots, potions, auto-loot detection, weight tracking
+6. **Quest Tracker** — Auto-detection, active/completed/failed states
+7. **Spell System** — 50+ spells (Cantrip–Level 9), slot tracking, prepared/known distinction
+8. **Bestiary** — 50+ enemies across 10 categories, encounter history tracking
+9. **Save/Load** — Multiple named slots, auto-save, JSON export/import
+10. **Dice Rolling** — d4 through d20, 30-second DM integration window
+11. **Voice Narration** — ElevenLabs, 5 distinct character voices
+12. **Background Music** — 10 tracks, auto scene-change detection
+13. **Sound Effects** — ElevenLabs ambient soundscape
+14. **Status Effects** ⭐ RECENTLY COMPLETED — Full D&D 5e conditions system (see below)
+
+### Character Classes (All 12 D&D 5e Core)
+Barbarian, Bard, Cleric, Druid, Fighter, Monk, Paladin, Ranger, Rogue, Sorcerer, Warlock, Wizard
+
+### Character Races (9)
+Human, Elf, Dwarf, Halfling, Half-Elf, Half-Orc, Gnome, Tiefling, Dragonborn
+
+### Spells (50+)
+- Cantrips through Level 9
+- Spell slot tracking per class table
+- Prepared/known spell distinction
+- SpellBook UI for casting outside combat
+- ❌ NOT YET: Spell damage application in combat
+- ❌ NOT YET: Target selection for offensive spells
+
+### Enemies (50+, 10 Categories)
+CR range: 0.125 to CR 10 — covers full tier 1 and tier 2 play
+
+### Status Effects (20+ D&D 5e Conditions) ✅ FULLY IMPLEMENTED
+**Standard Conditions:** Blinded, Charmed, Deafened, Exhaustion (1–6), Frightened, Grappled, Incapacitated, Invisible, Paralyzed, Petrified, Poisoned, Prone, Restrained, Stunned, Unconscious  
+**Spell Effects:** Blessed, Hasted, Slowed, Concentrating  
+**Combat Effects:** Raging, Dodging, Burning, Bleeding
+
+---
+
+## 🔄 AUTO-DETECTION SYSTEMS
+
+All four systems parse the DM's narration text and automatically update game state:
+
+### Pattern (Same for all)
 ```javascript
-// Always declare at top of component
-const [stateName, setStateName] = useState(initialValue);
-
-// Extract from store individually
-const storeFunc = useCampaignStore(state => state.storeFunc);
+// Detect events in narration → Update state → Show notification
+const events = detectXFromNarration(dmResponse.aiResponse);
+if (events.length > 0) {
+  updateState(events);
+  showNotification(events);
+}
 ```
 
-### **XP Detection Keywords:**
-Combat: defeated, slain, killed, vanquished, destroyed, battle won, victory, triumph
-Puzzles: solved, unlocked, discovered the solution
-Quests: quest complete, mission accomplished, task finished
+### XP Detection (`xpSystem.js`)
+- Parses narration for XP grant phrases
+- Triggers level-up animation if threshold crossed
+- Handles milestone XP and combat XP
 
-### **Voice Selection:**
-- Detects keywords in narration: "gravelly", "old", "young", "dark", "sinister"
-- Maps to ElevenLabs voice IDs
-- Parses dialogue from quotes in narration
+### Loot Detection (`inventorySystem.js`)
+- Detects item drops and gold awards from narration
+- Auto-adds to character inventory
+- Weight calculation
 
-### **Combat Flow:**
-1. StartCombatModal → select enemies → create combat state
-2. CombatTracker displays → roll initiative → sort turn order
-3. Player turn → select target → click attack → roll attack/damage
-4. Auto enemy turns → AI selects random alive party member
-5. Check for victory/defeat → award XP
+### Quest Detection (`questSystem.js`)
+- Detects new quest starts, completions, and failures
+- Updates quest tracker UI
 
----
-
-## 🎯 Key User Workflows
-
-### **Starting a Campaign:**
-1. DMSetup → Set theme/difficulty
-2. Click "Create Character" → 4-step wizard
-3. Add multiple characters
-4. Click "Begin Adventure"
-5. GameScreen loads with first DM narration
-
-### **Playing the Game:**
-1. Type action or use voice input
-2. DM responds with narration
-3. Voice narration plays automatically
-4. XP awarded if keywords detected
-5. Level-up animation if threshold reached
-6. Auto-save after each turn
-
-### **Combat:**
-1. Click "Start Combat" button
-2. Select enemies from templates
-3. Set count for each enemy type
-4. Initiative rolled automatically
-5. Take turns attacking enemies
-6. Auto enemy turns
-7. Victory → XP award → level-up check
+### Status Effect Detection (`statusEffectSystem.js`)
+Currently detecting these keywords in narration:
+`poisoned, paralyzed, stunned, frightened, charmed, blinded, prone, restrained, unconscious, burning, bleeding, blessed, hasted, slowed`
 
 ---
 
-## 🔧 Running the Project
+## ⚔️ COMBAT SYSTEM — FULL FLOW
 
-### **Start Backend:**
+### Turn Order
+1. Roll initiative (d20 + DEX modifier) for all combatants
+2. Sort by initiative (ties broken by DEX score)
+3. Player turns → AI-controlled enemy turns → repeat
+
+### Combat Turn Processing with Status Effects
+```javascript
+// 1. Turn starts → Process status effects (damage, duration countdown)
+const statusResult = processStatusEffectsOnTurnStart(combatant);
+
+// 2. Check if can act (incapacitated/stunned/paralyzed blocks action)
+if (canAct) {
+  // 3. Calculate advantage/disadvantage from active effects
+  const { hasAdvantage, hasDisadvantage } = getAdvantageStatus(effects);
+  
+  // 4. Execute action (attack, spell, item use, etc.)
+  executeAttack(target, hasAdvantage, hasDisadvantage);
+}
+
+// 5. If damaged, check concentration (DC 10 or half damage taken, whichever higher)
+if (damageTaken && isConcentrating) {
+  checkConcentration(damageTaken);
+}
+
+// 6. End turn — tick durations, remove expired effects
+handleEndTurn();
+```
+
+### Status Effect Application
+```javascript
+const effect = createStatusEffect({ type, duration, durationType });
+// durationType options: 'rounds' | 'minutes' | 'save-ends' | 'concentration'
+const updatedChar = applyStatusEffect(character, effect);
+updateParty(updatedParty);
+```
+
+### AI Enemy Turns
+- Fully automated by DM engine
+- Enemy selects targets, rolls attacks, applies damage
+- Enemy uses abilities based on bestiary entry
+
+---
+
+## 🎭 STATUS EFFECTS SYSTEM — DEEP DIVE (RECENTLY COMPLETED)
+
+### Files
+| File | Purpose |
+|---|---|
+| `frontend/src/utils/statusEffectSystem.js` | Core logic, creation, application, processing |
+| `frontend/src/components/StatusEffectsPanel.jsx` | Display (full view + compact icon strip) |
+| `frontend/src/components/ApplyStatusEffectModal.jsx` | Manual application UI modal |
+
+### Features
+- ✅ Auto-detection from DM narration
+- ✅ Manual application via "🎭 Effects" button in GameScreen
+- ✅ Advantage/disadvantage calculation (e.g., Blinded = disadvantage on attacks)
+- ✅ Incapacitation enforcement (Stunned/Paralyzed = skip turn)
+- ✅ Concentration checks on damage (DC = max(10, half damage))
+- ✅ Damage-over-time (Burning 1d6/turn, Bleeding 1d4/turn)
+- ✅ Duration tracking (rounds, minutes, save-ends, concentration)
+- ✅ Exhaustion levels 1–6 with stacking penalties
+- ✅ Visual icons on character cards in party view
+- ✅ Badge counters showing active effect count
+
+### Integration Points
+- **GameScreen.jsx** — Auto-detection hook, 🎭 Effects button, visual badges
+- **CombatTracker.jsx** — Turn processing, advantage calc, concentration checks
+- **CharacterSheet.jsx** — Combat tab renders `condition.name` (not condition object — critical fix!)
+
+---
+
+## 🐛 KNOWN BUGS & FIXES — COMPLETE HISTORY
+
+### Bug 1: Status Effect Rendering Error ✅ FIXED
+**Symptom:** "Objects are not valid as a React child" error  
+**Root Cause:** Rendering `condition` (object) instead of `condition.name` (string)  
+**Fix Location:** `frontend/src/components/CharacterSheet.jsx` → CombatTab section  
+**Fix:** Change `{condition}` to `{condition.name}` everywhere conditions are mapped
+
+### Bug 2: Groq API Key Expiry ⚠️ ONGOING
+**Symptom:** AI DM stops responding, 401 errors in Railway logs  
+**Fix:** Get new key at https://console.groq.com → Update Railway env var `GROQ_API_KEY`  
+**Note:** Keys expire without warning — first thing to check if AI goes silent
+
+### Bug 3: ElevenLabs Wrong Voice Model ✅ FIXED (permanent)
+**Symptom:** Voice synthesis fails with model error  
+**Root Cause:** Wrong model string used  
+**Fix:** Always use `eleven_turbo_v2_5` — NEVER `eleven_monolingual_v1`  
+**Location:** `backend/src/routes/voice.js`
+
+### Bug 4: CORS Issues ✅ FIXED
+**Symptom:** Frontend can't reach backend  
+**Fix:** CORS configured in Express to allow Vercel domain  
+**Location:** `backend/src/index.js` (or main entry)
+
+### Bug 5: React State Management (Historical)
+**Symptom:** State updates not reflecting in UI  
+**Fix:** Zustand store properly structured; use shallow equality selectors where needed
+
+---
+
+## ❌ NOT YET IMPLEMENTED — PRIORITY ORDER
+
+### 1. 🎯 Spell Damage in Combat — RECOMMENDED NEXT
+**What:** Cast offensive spells during combat, apply damage to enemies  
+**Files to Modify:**
+- `frontend/src/components/CombatTracker.jsx` — Add "Cast Spell" action option
+- `frontend/src/utils/spellSystem.js` — Add `calculateSpellDamage()` function
+- `frontend/src/components/SpellBook.jsx` — Add "Cast in Combat" button (only shows when in combat)
+- `frontend/src/components/CombatTracker.jsx` — Add target selection UI
+
+**Implementation Notes:**
+- Spell attacks: roll d20 + spellcasting modifier vs target AC
+- Saving throw spells: target rolls save vs spell save DC (8 + proficiency + casting mod)
+- Damage on hit: roll spell damage dice (e.g., Fireball = 8d6 fire)
+- Many spells apply status effects — integrate with statusEffectSystem
+- Cantrips scale with character level (standard D&D 5e progression)
+- Spell slots must be consumed on cast
+
+### 2. Shop/Merchant System
+- Buy/sell items with gold economy
+- Price scaling by item rarity
+- Merchant NPC auto-appears based on DM narration
+
+### 3. Concentration Tracking Improvements
+- Visual indicator (icon/glow) on spell that requires concentration
+- Auto-break when Incapacitated or Unconscious condition applied
+- Warning popup when trying to cast second concentration spell
+
+### 4. Warlock Pact Magic
+- All spell slots same level (not tiered)
+- Recover ALL slots on short rest (not long rest)
+- Special handling needed in spell slot tracker
+
+### 5. Third-Caster Spell Support
+- Eldritch Knight (Fighter archetype): 1/3 spell progression
+- Arcane Trickster (Rogue archetype): 1/3 spell progression
+- Spell list restricted to Wizard school (EK) / Enchantment+Illusion (AT)
+
+### 6. Ritual Casting
+- Cast certain spells without expending a slot
+- Takes 10 minutes (skip in exploration, flag in combat)
+- Show [R] tag on eligible spells in SpellBook
+
+### 7. Patreon Monetization Integration
+- Patreon OAuth for supporter verification
+- Premium features gate (extra voices, more save slots, etc.)
+
+---
+
+## 🎨 DESIGN SYSTEM
+
+### Visual Theme
+- **Background:** Deep dark (#0a0a0f, #111118)
+- **Accent:** Gold (#c9a84c, #e8c76b)
+- **Text:** Light parchment (#f0e6d3)
+- **Danger:** Deep crimson (#8b1a1a)
+- **Magic:** Purple (#6b21a8 range)
+
+### UI Patterns
+- Dark fantasy aesthetic throughout
+- Gold borders on important panels
+- Glowing effects on active elements (combat, spells)
+- Parchment texture for character sheet
+- Epic animations on level-up
+
+---
+
+## 🚀 HOW TO START A NEW DEVELOPMENT SESSION
+
+### Step 1 — Orient the AI
+Paste this entire document at the start of the chat.
+
+### Step 2 — State Your Goal
+Example: *"I want to implement Spell Damage in Combat (Priority 1 from the bootstrap)."*
+
+### Step 3 — Request Full Files
+Always ask for **complete file contents**, not snippets. The codebase is integrated enough that partial edits cause missed references.
+
+### Step 4 — Test Checklist Before Deploying
+```
+□ Status effects: Apply effect → Start combat → Verify turn processing
+□ Combat: Complete a full combat encounter
+□ Spells: Cast a spell from SpellBook
+□ Voice: Trigger narration → Voice plays
+□ Save/Load: Save game → Reload → Load save
+□ Auto-detection: Get XP/loot/quest from narration
+```
+
+### Step 5 — Deploy
 ```bash
-cd backend
-node src/index.js
-```
-Server runs on `http://localhost:3001`
+# Backend auto-deploys on git push to main
+git add .
+git commit -m "feat: description"
+git push
 
-### **Start Frontend:**
-```bash
-cd frontend
-npm start
-```
-App runs on `http://localhost:3000`
-
-### **Or Use Launcher (Windows):**
-```bash
-launcher.bat
+# Frontend — manual redeploy
+# Go to vercel.com → ai-dungeon-master → Deployments → Redeploy
 ```
 
 ---
 
-## 💡 Design Philosophy
+## 📊 SYSTEM METRICS
 
-- **Dark Fantasy Theme**: Gold accents, dark backgrounds, atmospheric
-- **Immersive Audio**: Voice narration with character voices, ambient sounds
-- **Automatic Systems**: XP detection, auto-save, AI enemy turns
-- **D&D 5e Accurate**: Real rules, proper dice mechanics, official classes/races
-- **User-Friendly**: Clear feedback, animations, tooltips, error handling
-
----
-
-## 📊 Current Status Summary
-
-**What Works Perfectly:**
-- ✅ Campaign creation and management
-- ✅ Character creation with full D&D 5e rules
-- ✅ XP and leveling with animations
-- ✅ Combat system with initiative and AI
-- ✅ Voice narration with dynamic voices
-- ✅ Save/load system
-- ✅ Dice rolling
-
-**What Needs Polish:**
-- ⚠️ UI consistency (theme exists but not applied everywhere)
-- ⚠️ Some components need styling updates
-- ⚠️ Could use more visual feedback in places
-
-**What Could Be Added:**
-- 🔲 Inventory system
-- 🔲 Background music
-- 🔲 Quest system
-- 🔲 Map/exploration system
-- 🔲 More enemy types
-- 🔲 Spell system
-- 🔲 Status effects
+| Metric | Count |
+|---|---|
+| Spells | 50+ (Cantrip–Level 9) |
+| Enemies | 50+ |
+| Enemy Categories | 10 |
+| Character Classes | 12 |
+| Character Races | 9 |
+| Music Tracks | 10 |
+| Max Character Level | 20 |
+| Status Effect Types | 20+ |
+| Voice Options | 5 |
+| Save Slots | Multiple (named) |
 
 ---
 
-## 🎨 Theme Reference
+## 💡 KEY ARCHITECTURAL DECISIONS
 
-```css
-Primary: #ffd700 (gold)
-Danger: #d32f2f (dark red)
-Success: #4CAF50 (green)
-Info: #2196F3 (blue)
-Warning: #ff9800 (orange)
+1. **All auto-detection happens in GameScreen.jsx** — it's the orchestration layer. Every DM response passes through it before state updates.
 
-BG Primary: #0a0a0a
-BG Secondary: #1a1a1a
-BG Tertiary: #2a2a2a
+2. **Zustand store is single source of truth** — never hold important state in component local state if it needs to persist or be accessed elsewhere.
 
-Text Primary: #eee
-Text Secondary: #aaa
-Text Tertiary: #888
+3. **Status effects live on character objects** — not in a separate store. Each character has `statusEffects: []` array.
 
-Border: #444
-Border Active: #ffd700
-```
+4. **Combat state is separate from campaign state** — CombatTracker manages its own local combat state, syncing back to campaignStore only on combat end.
+
+5. **All AI communication goes through dmEngine.js** — the prompt builder. If the AI behaves strangely, this is the first place to look.
+
+6. **ElevenLabs calls are fire-and-forget** — voice plays asynchronously, doesn't block game state updates.
 
 ---
 
-## 🚨 Critical Reminders for Next Session
+## 🔒 SECURITY NOTES
 
-1. **Always manually add useState declarations** - artifacts don't reliably apply them
-2. **ElevenLabs model is `eleven_turbo_v2_5`** - not the old monolingual one
-3. **Extract Zustand functions individually** - don't destructure from store
-4. **XP system is working** - detects from narration keywords
-5. **Combat system is complete** - just needs UI polish
-6. **Global CSS created but not imported yet** - this is the immediate next step
+- ⚠️ API keys are in environment variables — **never hardcode in frontend files**
+- ⚠️ The repo is public (GitHub) — audit before pushing to ensure no keys leaked in code history
+- Backend validates requests but does not currently enforce authentication — consider adding if the app scales
 
 ---
 
-## 📞 Quick Reference
+## 📝 DEVELOPMENT PRINCIPLES (George's Preferences)
 
-**Backend Port:** 3001
-**Frontend Port:** 3000
-**Main Entry:** `frontend/src/App.jsx` → routes to DMSetup or GameScreen
-**State Store:** `frontend/src/state/campaignStore.js`
-**DM AI:** `backend/src/dm/dmEngine.js`
-
----
-
-## ✨ What Makes This Project Special
-
-1. **Real D&D 5e mechanics** - not simplified
-2. **Professional voice acting** via ElevenLabs
-3. **Smart XP detection** - no manual tracking
-4. **Full combat system** - initiative, turns, AI enemies
-5. **Character progression** - level 1-20 with all features
-6. **Epic animations** - level-ups, XP gains, dice rolls
-7. **Save anywhere** - never lose progress
-8. **Multiple party members** - full party management
-
-This is a professional-quality AI DM that rivals commercial RPG experiences! 🎮✨
+1. **Always provide complete file contents** — no partial snippets or "replace this section" instructions
+2. **One major feature at a time** — fully implement and test before moving on
+3. **Automated game mechanics preferred** — the app should detect and respond without manual player intervention wherever possible
+4. **Full D&D 5e accuracy** — don't simplify mechanics, implement them properly
+5. **Console.log debugging** — the codebase uses extensive console.logs; keep them in during development
 
 ---
 
-*Last Updated: Current conversation*
-*Next Priority: Apply global.css theme to all components*
+## 🆘 QUICK TROUBLESHOOTING
+
+| Problem | First Check |
+|---|---|
+| AI DM not responding | Groq API key expired → Renew at console.groq.com |
+| Voice not playing | ElevenLabs model string → Must be `eleven_turbo_v2_5` |
+| Frontend can't reach backend | Railway service running? CORS config correct? |
+| React rendering error | Check for object-as-child (render `.name`, `.text` not whole object) |
+| State not updating | Zustand selector — use shallow equality, check store action |
+| Deploy not reflecting changes | Vercel — manual redeploy required after push |
+| Status effects not showing | Check `character.statusEffects` array in store is populated |
+
+---
+
+*This document represents the complete state of the AI Dungeon Master project as of February 2026. All listed features are confirmed working in production unless marked ❌.*

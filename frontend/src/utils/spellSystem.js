@@ -72,6 +72,106 @@ export const SPELL_SLOTS_HALF_CASTER = {
 };
 
 /**
+ * Warlock Pact Magic slot table.
+ *
+ * Key rules (D&D 5e RAW):
+ *   - All slots are the SAME level (pact slot level).
+ *   - ALL slots recover on a SHORT rest (not long rest).
+ *   - Warlocks cannot downcast — every cast uses the pact slot level.
+ *
+ * Format: { slotCount, slotLevel }
+ * (We also expose a 9-element array via getSpellSlots for display compatibility.)
+ */
+export const WARLOCK_PACT_MAGIC = {
+  1:  { slotCount: 1, slotLevel: 1 },
+  2:  { slotCount: 2, slotLevel: 1 },
+  3:  { slotCount: 2, slotLevel: 2 },
+  4:  { slotCount: 2, slotLevel: 2 },
+  5:  { slotCount: 2, slotLevel: 3 },
+  6:  { slotCount: 2, slotLevel: 3 },
+  7:  { slotCount: 2, slotLevel: 4 },
+  8:  { slotCount: 2, slotLevel: 4 },
+  9:  { slotCount: 2, slotLevel: 5 },
+  10: { slotCount: 2, slotLevel: 5 },
+  11: { slotCount: 3, slotLevel: 5 },
+  12: { slotCount: 3, slotLevel: 5 },
+  13: { slotCount: 3, slotLevel: 5 },
+  14: { slotCount: 3, slotLevel: 5 },
+  15: { slotCount: 3, slotLevel: 5 },
+  16: { slotCount: 3, slotLevel: 5 },
+  17: { slotCount: 4, slotLevel: 5 },
+  18: { slotCount: 4, slotLevel: 5 },
+  19: { slotCount: 4, slotLevel: 5 },
+  20: { slotCount: 4, slotLevel: 5 }
+};
+
+/**
+ * Third-caster progression (Eldritch Knight / Arcane Trickster).
+ * Spell slots begin at character level 3. Max spell level is 4.
+ * Formula: treat character level as (level-2) / 3 rounded down, then use full-caster table.
+ * Per D&D 5e PHB table.
+ */
+export const SPELL_SLOTS_THIRD_CASTER = {
+  1:  [0, 0, 0, 0, 0, 0, 0, 0, 0],
+  2:  [0, 0, 0, 0, 0, 0, 0, 0, 0],
+  3:  [2, 0, 0, 0, 0, 0, 0, 0, 0],
+  4:  [3, 0, 0, 0, 0, 0, 0, 0, 0],
+  5:  [3, 0, 0, 0, 0, 0, 0, 0, 0],
+  6:  [3, 0, 0, 0, 0, 0, 0, 0, 0],
+  7:  [4, 2, 0, 0, 0, 0, 0, 0, 0],
+  8:  [4, 2, 0, 0, 0, 0, 0, 0, 0],
+  9:  [4, 2, 0, 0, 0, 0, 0, 0, 0],
+  10: [4, 3, 0, 0, 0, 0, 0, 0, 0],
+  11: [4, 3, 0, 0, 0, 0, 0, 0, 0],
+  12: [4, 3, 0, 0, 0, 0, 0, 0, 0],
+  13: [4, 3, 2, 0, 0, 0, 0, 0, 0],
+  14: [4, 3, 2, 0, 0, 0, 0, 0, 0],
+  15: [4, 3, 2, 0, 0, 0, 0, 0, 0],
+  16: [4, 3, 3, 0, 0, 0, 0, 0, 0],
+  17: [4, 3, 3, 0, 0, 0, 0, 0, 0],
+  18: [4, 3, 3, 0, 0, 0, 0, 0, 0],
+  19: [4, 3, 3, 1, 0, 0, 0, 0, 0],
+  20: [4, 3, 3, 1, 0, 0, 0, 0, 0]
+};
+
+/**
+ * Subclass definitions for third-caster archetypes.
+ * key: subclass name as stored on character.subclass
+ */
+export const THIRD_CASTER_SUBCLASSES = {
+  'Eldritch Knight': {
+    class: 'Fighter',
+    spellList: 'Wizard',
+    restrictedSchools: ['Abjuration', 'Evocation'], // Must pick from these (with 2 free choices total)
+    description: 'Fighters who supplement their martial training with magic, focused on Abjuration and Evocation.'
+  },
+  'Arcane Trickster': {
+    class: 'Rogue',
+    spellList: 'Wizard',
+    restrictedSchools: ['Enchantment', 'Illusion'], // Must pick from these (with 2 free choices total)
+    description: 'Rogues who enhance their larceny and combat with Enchantment and Illusion magic.'
+  }
+};
+
+/**
+ * Returns true if the character is a third-caster (Eldritch Knight or Arcane Trickster).
+ * Requires character.subclass to be set.
+ */
+export function isThirdCaster(character) {
+  return SPELLCASTING_CLASSES[character.class] === 'third' &&
+    !!THIRD_CASTER_SUBCLASSES[character.subclass];
+}
+
+/**
+ * Returns the restricted spell schools for the character's subclass, or null.
+ */
+export function getRestrictedSchools(character) {
+  const sub = THIRD_CASTER_SUBCLASSES[character.subclass];
+  return sub ? sub.restrictedSchools : null;
+}
+
+
+/**
  * Classes and their spellcasting type
  */
 export const SPELLCASTING_CLASSES = {
@@ -80,12 +180,27 @@ export const SPELLCASTING_CLASSES = {
   Cleric: 'full',
   Druid: 'full',
   Bard: 'full',
-  Warlock: 'pact', // Special case
+  Warlock: 'pact', // Special case — short rest recovery, same-level slots
   Paladin: 'half',
   Ranger: 'half',
   Fighter: 'third', // Eldritch Knight
   Rogue: 'third'    // Arcane Trickster
 };
+
+/**
+ * Returns true if the character is a Warlock using Pact Magic.
+ */
+export function isWarlockPactMagic(character) {
+  return SPELLCASTING_CLASSES[character.class] === 'pact';
+}
+
+/**
+ * Returns the Warlock's current pact slot info: { slotCount, slotLevel }
+ * Falls back to level-1 entry if level is out of range.
+ */
+export function getWarlockPactSlots(character) {
+  return WARLOCK_PACT_MAGIC[character.level] || WARLOCK_PACT_MAGIC[1];
+}
 
 /**
  * Spell Database (100+ spells!)
@@ -282,6 +397,32 @@ export const SPELL_DATABASE = {
     description: 'Sense the presence of magic within 30 feet.',
     ritual: true,
     concentration: true
+  },
+
+  identify: {
+    name: 'Identify',
+    level: 1,
+    school: SPELL_SCHOOLS.DIVINATION,
+    castingTime: '1 minute',
+    range: 'Touch',
+    components: 'V, S, M',
+    duration: 'Instantaneous',
+    description: 'Learn the properties of a magic item or the spells affecting a creature.',
+    ritual: true,
+    concentration: false
+  },
+
+  find_familiar: {
+    name: 'Find Familiar',
+    level: 1,
+    school: SPELL_SCHOOLS.CONJURATION,
+    castingTime: '1 hour',
+    range: '10 feet',
+    components: 'V, S, M',
+    duration: 'Instantaneous',
+    description: 'Summon a fey spirit in the form of an animal to serve as your familiar.',
+    ritual: true,
+    concentration: false
   },
 
   sleep: {
@@ -535,7 +676,7 @@ export const SPELL_DATABASE = {
     components: 'V, M',
     duration: '1 round',
     description: 'Create a portal to a permanent teleportation circle.',
-    ritual: false,
+    ritual: true,
     concentration: false
   },
 
@@ -648,73 +789,78 @@ export function getSpellsBySchool(school) {
 }
 
 /**
- * Get spell slots for character
+ * Get spell slots for character.
+ *
+ * For Warlocks, returns a 9-element array where only the pact slot level
+ * index is non-zero (e.g. level-5 Warlock → [0,0,0,0,2,0,0,0,0]).
+ * This keeps compatibility with all existing slot display code.
  */
 export function getSpellSlots(character) {
   const spellcastingType = SPELLCASTING_CLASSES[character.class];
-  
+
   if (!spellcastingType) {
     return [0, 0, 0, 0, 0, 0, 0, 0, 0];
   }
-  
+
   if (spellcastingType === 'full') {
     return SPELL_SLOTS_FULL_CASTER[character.level] || [0, 0, 0, 0, 0, 0, 0, 0, 0];
   }
-  
+
   if (spellcastingType === 'half') {
     return SPELL_SLOTS_HALF_CASTER[character.level] || [0, 0, 0, 0, 0, 0, 0, 0, 0];
   }
-  
-  // Warlock special case
+
+  // Warlock Pact Magic — all slots at a single level
   if (spellcastingType === 'pact') {
-    const warlockSlots = {
-      1: [1, 0, 0, 0, 0],
-      2: [2, 0, 0, 0, 0],
-      3: [0, 2, 0, 0, 0],
-      4: [0, 2, 0, 0, 0],
-      5: [0, 0, 2, 0, 0],
-      6: [0, 0, 2, 0, 0],
-      7: [0, 0, 0, 2, 0],
-      8: [0, 0, 0, 2, 0],
-      9: [0, 0, 0, 0, 2],
-      10: [0, 0, 0, 0, 2],
-      11: [0, 0, 0, 0, 3],
-      12: [0, 0, 0, 0, 3],
-      13: [0, 0, 0, 0, 3],
-      14: [0, 0, 0, 0, 3],
-      15: [0, 0, 0, 0, 3],
-      16: [0, 0, 0, 0, 3],
-      17: [0, 0, 0, 0, 4],
-      18: [0, 0, 0, 0, 4],
-      19: [0, 0, 0, 0, 4],
-      20: [0, 0, 0, 0, 4]
-    };
-    return warlockSlots[character.level] || [0, 0, 0, 0, 0];
+    const { slotCount, slotLevel } = getWarlockPactSlots(character);
+    const slots = [0, 0, 0, 0, 0, 0, 0, 0, 0];
+    slots[slotLevel - 1] = slotCount;
+    return slots;
   }
-  
+
+  // Third-caster (Eldritch Knight / Arcane Trickster) — needs subclass set
+  if (spellcastingType === 'third') {
+    if (!isThirdCaster(character)) {
+      // No subclass selected yet — not a spellcaster
+      return [0, 0, 0, 0, 0, 0, 0, 0, 0];
+    }
+    return SPELL_SLOTS_THIRD_CASTER[character.level] || [0, 0, 0, 0, 0, 0, 0, 0, 0];
+  }
+
   return [0, 0, 0, 0, 0, 0, 0, 0, 0];
 }
 
 /**
- * Check if character can cast spell
+ * Check if character can cast a spell.
+ *
+ * For Warlocks, the spell must be at or below the pact slot level —
+ * they cannot cast spells requiring a slot higher than their pact level.
  */
 export function canCastSpell(character, spell) {
   // Cantrips can always be cast
   if (spell.level === 0) return true;
-  
-  // Check if character has spell slots
+
+  if (isWarlockPactMagic(character)) {
+    const { slotLevel } = getWarlockPactSlots(character);
+    // Spell level must be ≤ pact slot level AND must have slots remaining
+    if (spell.level > slotLevel) return false;
+    const currentSlots = character.spellSlots?.current || getSpellSlots(character);
+    return (currentSlots[slotLevel - 1] || 0) > 0;
+  }
+
   const spellSlots = getSpellSlots(character);
   const currentSlots = character.spellSlots?.current || spellSlots;
-  
-  return currentSlots[spell.level - 1] > 0;
+  return (currentSlots[spell.level - 1] || 0) > 0;
 }
 
 /**
- * Cast a spell (uses spell slot)
+ * Cast a spell (uses a spell slot).
+ *
+ * For Warlocks, always consumes one pact slot (at the pact slot level),
+ * regardless of the spell's base level. The slotLevel param is ignored
+ * for Warlocks — they cannot choose a different slot level.
  */
 export function castSpell(character, spell, slotLevel = null) {
-  const level = slotLevel || spell.level;
-  
   // Cantrips don't use slots
   if (spell.level === 0) {
     return {
@@ -723,21 +869,35 @@ export function castSpell(character, spell, slotLevel = null) {
       message: `Cast ${spell.name}!`
     };
   }
-  
-  // Check if has slots
+
   if (!canCastSpell(character, spell)) {
     return {
       success: false,
       character,
-      message: `No spell slots remaining for level ${spell.level}!`
+      message: isWarlockPactMagic(character)
+        ? `No Pact Magic slots remaining! Take a short rest to recover.`
+        : `No spell slots remaining for level ${spell.level}!`
     };
   }
-  
-  // Use slot
+
   const spellSlots = getSpellSlots(character);
-  const currentSlots = character.spellSlots?.current || [...spellSlots];
-  currentSlots[level - 1] -= 1;
-  
+  const currentSlots = character.spellSlots?.current
+    ? [...character.spellSlots.current]
+    : [...spellSlots];
+
+  let usedLevel;
+
+  if (isWarlockPactMagic(character)) {
+    // Always use pact slot level — Warlocks don't choose
+    const { slotLevel: pactLevel } = getWarlockPactSlots(character);
+    usedLevel = pactLevel;
+    currentSlots[pactLevel - 1] -= 1;
+  } else {
+    // Normal casters: use requested slot level or spell's base level
+    usedLevel = slotLevel || spell.level;
+    currentSlots[usedLevel - 1] -= 1;
+  }
+
   return {
     success: true,
     character: {
@@ -747,22 +907,125 @@ export function castSpell(character, spell, slotLevel = null) {
         current: currentSlots
       }
     },
-    message: `Cast ${spell.name} using a level ${level} spell slot!`
+    message: isWarlockPactMagic(character)
+      ? `Cast ${spell.name} using a Pact Magic slot (level ${usedLevel})!`
+      : `Cast ${spell.name} using a level ${usedLevel} spell slot!`
   };
 }
 
 /**
- * Rest and restore spell slots
+ * Long rest — restores all spell slots for non-Warlocks.
+ * Warlocks do NOT recover pact slots on a long rest via this path
+ * (they use shortRest instead), but we still restore them here for
+ * convenience since a long rest includes all benefits of a short rest.
  */
 export function longRest(character) {
   const spellSlots = getSpellSlots(character);
-  
+
   return {
     ...character,
     spellSlots: {
       max: spellSlots,
-      current: [...spellSlots]}
+      current: [...spellSlots]
+    }
   };
+}
+
+/**
+ * Short rest — ONLY Warlocks recover spell slots on a short rest.
+ * Other classes recover nothing (hit dice use handled elsewhere).
+ *
+ * Returns the updated character object. Always safe to call on any class —
+ * non-Warlocks are returned unchanged.
+ */
+export function shortRest(character) {
+  if (!isWarlockPactMagic(character)) {
+    // Non-Warlocks: no spell slot recovery on a short rest
+    return character;
+  }
+
+  // Warlocks: restore all pact slots
+  const spellSlots = getSpellSlots(character);
+  console.log(`[shortRest] ${character.name} (Warlock) recovers all Pact Magic slots.`);
+
+  return {
+    ...character,
+    spellSlots: {
+      max: spellSlots,
+      current: [...spellSlots]
+    }
+  };
+}
+
+/**
+ * Classes that can perform ritual casting.
+ * - Wizard: can ritual cast any ritual spell in their spellbook (known list)
+ * - Cleric, Druid, Bard: can ritual cast ritual spells they have prepared/known
+ * - Warlock, Sorcerer, Paladin, Ranger: NO ritual casting
+ */
+export const RITUAL_CASTER_CLASSES = new Set(['Wizard', 'Cleric', 'Druid', 'Bard']);
+
+/**
+ * Check if a character can ritual cast a specific spell.
+ *
+ * Rules:
+ *  1. Spell must have ritual: true
+ *  2. Character's class must be in RITUAL_CASTER_CLASSES
+ *  3. Wizards can cast any ritual spell they know (spells.known)
+ *     Other ritual casters need the spell prepared or known
+ */
+export function canRitualCast(character, spell) {
+  if (!spell.ritual) return false;
+  if (!RITUAL_CASTER_CLASSES.has(character.class)) return false;
+
+  const knownKeys   = character.spells?.known    || [];
+  const preparedKeys = character.spells?.prepared || [];
+  const cantripKeys  = character.spells?.cantrips || [];
+  const allAccessible = [...new Set([...knownKeys, ...preparedKeys, ...cantripKeys])];
+
+  // Wizards: any ritual spell in their spellbook (known list) qualifies
+  if (character.class === 'Wizard') {
+    return knownKeys.includes(spell.key) || allAccessible.includes(spell.key);
+  }
+
+  // Other ritual casters: must have it prepared or known
+  return allAccessible.includes(spell.key);
+}
+
+/**
+ * Cast a spell as a ritual — no spell slot consumed.
+ * Returns same shape as castSpell() for easy drop-in use.
+ *
+ * Note: ritual casting takes 10 extra minutes in real D&D,
+ * which we flag in the message but don't block on.
+ */
+export function castRitual(character, spell) {
+  if (!canRitualCast(character, spell)) {
+    return {
+      success: false,
+      character,
+      message: `${character.name} cannot ritual cast ${spell.name}.`
+    };
+  }
+
+  console.log(`[RitualCast] ${character.name} ritual casts ${spell.name} (no slot used).`);
+
+  return {
+    success: true,
+    character, // No slot consumed — character state unchanged
+    message: `${spell.name} cast as a ritual! (10 minutes, no spell slot used)`
+  };
+}
+
+/**
+ * Get all ritual spells accessible to a character (for SpellBook filtering).
+ */
+export function getRitualSpells(character) {
+  if (!RITUAL_CASTER_CLASSES.has(character.class)) return [];
+
+  return Object.entries(SPELL_DATABASE)
+    .filter(([key, spell]) => spell.ritual && canRitualCast(character, { ...spell, key }))
+    .map(([key, spell]) => ({ key, ...spell }));
 }
 
 /**
@@ -772,7 +1035,7 @@ export function prepareSpells(character, spellKeys) {
   const spellcastingAbility = getSpellcastingAbility(character.class);
   const modifier = Math.floor((character.abilities[spellcastingAbility] - 10) / 2);
   const maxPrepared = Math.max(1, character.level + modifier);
-  
+
   if (spellKeys.length > maxPrepared) {
     return {
       success: false,
@@ -780,7 +1043,7 @@ export function prepareSpells(character, spellKeys) {
       message: `Can only prepare ${maxPrepared} spells!`
     };
   }
-  
+
   return {
     success: true,
     character: {
@@ -810,7 +1073,7 @@ export function getSpellcastingAbility(className) {
     Fighter: 'INT',
     Rogue: 'INT'
   };
-  
+
   return abilities[className] || 'INT';
 }
 
@@ -821,7 +1084,7 @@ export function getSpellSaveDC(character) {
   const ability = getSpellcastingAbility(character.class);
   const modifier = Math.floor((character.abilities[ability] - 10) / 2);
   const proficiencyBonus = Math.floor((character.level - 1) / 4) + 2;
-  
+
   return 8 + proficiencyBonus + modifier;
 }
 
@@ -832,7 +1095,7 @@ export function getSpellAttackBonus(character) {
   const ability = getSpellcastingAbility(character.class);
   const modifier = Math.floor((character.abilities[ability] - 10) / 2);
   const proficiencyBonus = Math.floor((character.level - 1) / 4) + 2;
-  
+
   return proficiencyBonus + modifier;
 }
 
@@ -842,13 +1105,13 @@ export function getSpellAttackBonus(character) {
 export function learnSpell(character, spellKey) {
   const spell = SPELL_DATABASE[spellKey];
   if (!spell) return { success: false, character, message: 'Spell not found!' };
-  
+
   const knownSpells = character.spells?.known || [];
-  
+
   if (knownSpells.includes(spellKey)) {
     return { success: false, character, message: 'Already know this spell!' };
   }
-  
+
   return {
     success: true,
     character: {
@@ -868,17 +1131,17 @@ export function learnSpell(character, spellKey) {
 export function getAvailableSpellLevels(character) {
   const slots = getSpellSlots(character);
   const levels = [];
-  
+
   // Always have cantrips
   levels.push(0);
-  
+
   // Add spell levels with slots
   for (let i = 0; i < slots.length; i++) {
     if (slots[i] > 0) {
       levels.push(i + 1);
     }
   }
-  
+
   return levels;
 }
 
@@ -903,11 +1166,11 @@ export function getAccessibleSpells(character) {
   if (usesPreparedSpells(character.class)) {
     return character.spells?.prepared || [];
   }
-  
+
   if (usesKnownSpells(character.class)) {
     return character.spells?.known || [];
   }
-  
+
   return [];
 }
 
@@ -916,16 +1179,16 @@ export function getAccessibleSpells(character) {
  */
 export function initializeSpells(character) {
   const spellcastingType = SPELLCASTING_CLASSES[character.class];
-  
+
   if (!spellcastingType) {
     return character; // Not a spellcaster
   }
-  
+
   const spellSlots = getSpellSlots(character);
-  
+
   // Starting cantrips and spells by class
   const startingSpells = getStartingSpells(character.class);
-  
+
   return {
     ...character,
     spells: {
@@ -986,7 +1249,7 @@ function getStartingSpells(className) {
       prepared: []
     }
   };
-  
+
   return starting[className] || { cantrips: [], known: [], prepared: [] };
 }
 
@@ -995,7 +1258,7 @@ function getStartingSpells(className) {
  */
 export function calculateSpellDamage(spell, characterLevel, upcastLevel = null) {
   if (!spell.damage) return null;
-  
+
   // For cantrips, use scaling damage
   if (spell.level === 0 && spell.scalingDamage) {
     for (const [level, damage] of Object.entries(spell.scalingDamage).reverse()) {
@@ -1004,7 +1267,7 @@ export function calculateSpellDamage(spell, characterLevel, upcastLevel = null) 
       }
     }
   }
-  
+
   // For leveled spells with upcasting
   if (upcastLevel && upcastLevel > spell.level && spell.upcastBonus) {
     const levelDiff = upcastLevel - spell.level;
@@ -1016,7 +1279,7 @@ export function calculateSpellDamage(spell, characterLevel, upcastLevel = null) 
       return `${parseInt(numDice) + extraDice}d${dieSize}`;
     }
   }
-  
+
   return spell.damage;
 }
 
@@ -1026,20 +1289,20 @@ export function calculateSpellDamage(spell, characterLevel, upcastLevel = null) 
 export function rollSpellDamage(damageString) {
   const match = damageString.match(/(\d+)d(\d+)([+-]\d+)?/);
   if (!match) return { total: 0, rolls: [] };
-  
+
   const [, numDice, dieSize, modifier] = match;
   let total = 0;
   const rolls = [];
-  
+
   for (let i = 0; i < parseInt(numDice); i++) {
     const roll = Math.floor(Math.random() * parseInt(dieSize)) + 1;
     rolls.push(roll);
     total += roll;
   }
-  
+
   if (modifier) {
     total += parseInt(modifier);
   }
-  
+
   return { total, rolls, modifier: modifier || '+0' };
 }
