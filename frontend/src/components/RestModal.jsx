@@ -189,7 +189,7 @@ function ShortRestPanel({ party, onConfirm }) {
                   {r.rolls.map((v, i) => (
                     <span key={i} style={{ color: '#81C784', marginRight: '4px' }}>[{v}]</span>
                   ))}
-                  {r.conMod !== 0 && <span style={{ color: '#888' }}>× {r.dice} ({r.conMod >= 0 ? '+' : ''}{r.conMod × r.dice} CON) </span>}
+                  {r.conMod !== 0 && <span style={{ color: '#888' }}>× {r.dice} ({r.conMod >= 0 ? '+' : ''}{r.conMod * r.dice} CON) </span>}
                   <span style={{ color: '#4CAF50', fontWeight: 'bold' }}> = +{r.hpGained} HP</span>
                 </div>
               );
