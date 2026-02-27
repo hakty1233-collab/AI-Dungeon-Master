@@ -59,7 +59,7 @@ export default function DMSetup() {
         marginBottom: "10px",
         textShadow: "0 0 20px rgba(255,215,0,0.5)"
       }}>
-        ⚔️ AI Dungeon Master
+        ⚔️ The Story Teller
       </h1>
       <p style={{
         textAlign: "center",
