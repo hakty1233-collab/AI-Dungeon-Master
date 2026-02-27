@@ -1,4 +1,4 @@
-// frontend/src/components/GameScreen.jsx - WITH QUEST SYSTEM, BESTIARY, SPELLS, STATUS EFFECTS, SHOP, AND LEVEL UP
+// frontend/src/components/GameScreen.jsx - WITH QUEST SYSTEM, BESTIARY, SPELLS, STATUS EFFECTS, SHOP, LEVEL UP, AND REST
 import { useState, useEffect, useRef } from "react";
 import { useCampaignStore } from "../state/campaignStore";
 import { playTurn } from "../services/api";
@@ -35,30 +35,18 @@ import StatusEffectsPanel from './StatusEffectsPanel';
 import ApplyStatusEffectModal from './ApplyStatusEffectModal';
 import PatreonButton from "./PatreonButton";
 import ShopModal from './ShopModal';
+import RestModal from './RestModal'; // ⛺ REST SYSTEM
 
 /* ============================
    Combat Detection Helper
    ============================ */
 function detectCombatInNarration(narration) {
   if (!narration) return null;
-  
-  if (narration.includes('**COMBAT_START**')) {
-    return { type: 'start', marker: '**COMBAT_START**' };
-  }
-  
-  if (narration.includes('**COMBAT_END**')) {
-    return { type: 'end', marker: '**COMBAT_END**' };
-  }
-  
+  if (narration.includes('**COMBAT_START**')) return { type: 'start', marker: '**COMBAT_START**' };
+  if (narration.includes('**COMBAT_END**')) return { type: 'end', marker: '**COMBAT_END**' };
   const lowerText = narration.toLowerCase();
-  const combatStartKeywords = [
-    'attacks you', 'draws their weapon', 'charges at you', 
-    'initiative', 'roll for initiative', 'combat begins',
-    'enemies appear', 'ambush', 'surprise attack'
-  ];
-  
-  const hasCombatStart = combatStartKeywords.some(kw => lowerText.includes(kw));
-  if (hasCombatStart) return { type: 'start', marker: null };
+  const combatStartKeywords = ['attacks you', 'draws their weapon', 'charges at you', 'initiative', 'roll for initiative', 'combat begins', 'enemies appear', 'ambush', 'surprise attack'];
+  if (combatStartKeywords.some(kw => lowerText.includes(kw))) return { type: 'start', marker: null };
   return null;
 }
 
@@ -68,7 +56,6 @@ function detectCombatInNarration(narration) {
 function detectStatusEffectsInNarration(narration) {
   const lowerText = narration.toLowerCase();
   const detectedEffects = [];
-
   const effectKeywords = {
     [STATUS_EFFECTS.POISONED]: ['poisoned', 'poison', 'venom', 'toxic'],
     [STATUS_EFFECTS.PARALYZED]: ['paralyzed', 'paralysis', 'cannot move'],
@@ -85,19 +72,13 @@ function detectStatusEffectsInNarration(narration) {
     [STATUS_EFFECTS.HASTED]: ['hasted', 'speed increased', 'quickened'],
     [STATUS_EFFECTS.SLOWED]: ['slowed', 'sluggish', 'speed reduced'],
   };
-
   Object.entries(effectKeywords).forEach(([effectType, keywords]) => {
     if (keywords.some(keyword => lowerText.includes(keyword))) {
       console.log(`✨ Detected status effect: ${effectType}`);
-      let duration = 1;
-      let durationType = DURATION_TYPES.ROUNDS;
-      if (effectType === STATUS_EFFECTS.BURNING || effectType === STATUS_EFFECTS.BLEEDING) {
-        duration = 3;
-      }
-      detectedEffects.push({ type: effectType, duration, durationType, source: 'Combat', saveDC: null });
+      const duration = (effectType === STATUS_EFFECTS.BURNING || effectType === STATUS_EFFECTS.BLEEDING) ? 3 : 1;
+      detectedEffects.push({ type: effectType, duration, durationType: DURATION_TYPES.ROUNDS, source: 'Combat', saveDC: null });
     }
   });
-
   return detectedEffects;
 }
 
@@ -108,7 +89,6 @@ export default function GameScreen() {
   const [showLoadModal, setShowLoadModal] = useState(false);
   const [selectedCharacter, setSelectedCharacter] = useState(null);
   const [showCharacterSheet, setShowCharacterSheet] = useState(false);
-  // ── Level Up: queue-based so multiple characters level up one at a time ──
   const [levelUpQueue, setLevelUpQueue] = useState([]);
   const activeLevelUp = levelUpQueue[0] || null;
   const [xpNotification, setXPNotification] = useState(null);
@@ -125,7 +105,8 @@ export default function GameScreen() {
   const [showApplyStatusEffect, setShowApplyStatusEffect] = useState(false);
   const [statusEffectTarget, setStatusEffectTarget] = useState(null);
   const [showShop, setShowShop] = useState(false);
-  
+  const [showRestModal, setShowRestModal] = useState(false); // ⛺ REST
+
   const audioRef = useRef(null);
   const audioQueue = useRef([]);
   const isPlaying = useRef(false);
@@ -168,21 +149,13 @@ export default function GameScreen() {
     audioRef.current.play().catch(() => { isPlaying.current = false; playAudioQueue(); });
   };
 
-  const playBackgroundSound = (audioData, category) => {
-    try {
-      const audio = new Audio(audioData);
-      audio.volume = 0.3;
-      audio.loop = false;
-      audio.play().catch(() => {});
-    } catch (err) {}
+  const playBackgroundSound = (audioData) => {
+    try { const a = new Audio(audioData); a.volume = 0.3; a.play().catch(() => {}); } catch (err) {}
   };
 
   const playSoundEffects = async (text) => {
     if (!soundEffectsEnabled) return;
-    try {
-      const soundEffects = await generateSoundEffects(text);
-      soundEffects.forEach(sfx => playBackgroundSound(sfx.audio, sfx.category));
-    } catch (err) {}
+    try { const sfx = await generateSoundEffects(text); sfx.forEach(s => playBackgroundSound(s.audio)); } catch (err) {}
   };
 
   const speakWithElevenLabs = async (text, voice = "narrator") => {
@@ -196,8 +169,7 @@ export default function GameScreen() {
       setIsGeneratingVoice(false);
     } catch (err) {
       setIsGeneratingVoice(false);
-      const utterance = new SpeechSynthesisUtterance(text);
-      speechSynthesis.speak(utterance);
+      speechSynthesis.speak(new SpeechSynthesisUtterance(text));
     }
   };
 
@@ -214,9 +186,7 @@ export default function GameScreen() {
     }
     if (typeof aiResponse === 'string' && aiResponse.trim()) {
       const segments = parseNarrative(aiResponse);
-      for (const segment of segments) {
-        await speakWithElevenLabs(segment.text, segment.voice);
-      }
+      for (const segment of segments) await speakWithElevenLabs(segment.text, segment.voice);
     }
   };
 
@@ -226,67 +196,54 @@ export default function GameScreen() {
     addDiceRoll({ sides, result });
   };
 
-  const handleOpenInventory = (character) => {
-    setActiveCharacterInventory(character);
-    setShowInventory(true);
-  };
+  const handleOpenInventory = (character) => { setActiveCharacterInventory(character); setShowInventory(true); };
 
   const handleUpdateCharacterInventory = (updatedChar) => {
-    const updatedParty = party.map(c => c.name === updatedChar.name ? updatedChar : c);
-    updateParty(updatedParty);
+    updateParty(party.map(c => c.name === updatedChar.name ? updatedChar : c));
     setActiveCharacterInventory(updatedChar);
   };
 
   const handleUpdateInventory = (newInventory) => {
-    if (activeCharacterInventory) {
-      const updatedChar = { ...activeCharacterInventory, inventory: newInventory };
-      handleUpdateCharacterInventory(updatedChar);
-    }
+    if (activeCharacterInventory) handleUpdateCharacterInventory({ ...activeCharacterInventory, inventory: newInventory });
   };
 
-  const handleOpenSpellBook = (character) => {
-    setActiveSpellcaster(character);
-    setShowSpellBook(true);
-  };
+  const handleOpenSpellBook = (character) => { setActiveSpellcaster(character); setShowSpellBook(true); };
 
   const handleUpdateSpellcaster = (updatedChar) => {
-    const updatedParty = party.map(c => c.name === updatedChar.name ? updatedChar : c);
-    updateParty(updatedParty);
+    updateParty(party.map(c => c.name === updatedChar.name ? updatedChar : c));
     setActiveSpellcaster(updatedChar);
   };
 
-  const handleOpenStatusEffects = (character) => {
-    setStatusEffectTarget(character);
-    setShowApplyStatusEffect(true);
-  };
+  const handleOpenStatusEffects = (character) => { setStatusEffectTarget(character); setShowApplyStatusEffect(true); };
 
   const handleApplyStatusEffect = (updatedChar) => {
-    const updatedParty = party.map(c => c.name === updatedChar.name ? updatedChar : c);
-    updateParty(updatedParty);
+    updateParty(party.map(c => c.name === updatedChar.name ? updatedChar : c));
     setShowApplyStatusEffect(false);
     setStatusEffectTarget(null);
   };
 
-  // ── Level Up: apply choices and advance the queue ──
   const handleLevelUpComplete = (updatedCharacter) => {
-    const updatedParty = party.map(c =>
-      c.name === updatedCharacter.name ? updatedCharacter : c
-    );
-    updateParty(updatedParty);
+    updateParty(party.map(c => c.name === updatedCharacter.name ? updatedCharacter : c));
     setLevelUpQueue(prev => prev.slice(1));
+  };
+
+  // ⛺ REST: apply updated party and pre-fill DM input so the AI reacts narratively
+  const handleRestConfirm = (updatedParty, restType) => {
+    updateParty(updatedParty);
+    setShowRestModal(false);
+    setInput(`[The party takes a ${restType === 'long' ? 'Long' : 'Short'} Rest]`);
+    console.log(`[Rest] ${restType} rest complete — party updated.`);
   };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (!input.trim()) return;
-
     let enhancedMessage = input;
     if (lastDiceRoll && (Date.now() - lastDiceRoll.timestamp) < 30000) {
       enhancedMessage = `${input} [Player rolled d${lastDiceRoll.sides}: ${lastDiceRoll.result}]`;
       console.log("🎲 Including dice roll:", lastDiceRoll);
       setLastDiceRoll(null);
     }
-
     try {
       const dmResponse = await playTurn({ message: enhancedMessage, campaign, party });
       updateFromDM(dmResponse);
@@ -299,10 +256,7 @@ export default function GameScreen() {
           setXPNotification({ xpGained: xpResult.totalXP, reason: xpResult.message });
           if (xpResult.levelUps.length > 0) {
             setTimeout(() => {
-              setLevelUpQueue(xpResult.levelUps.map(lu => ({
-                ...lu.character.pendingLevelUp,
-                characterName: lu.name,
-              })));
+              setLevelUpQueue(xpResult.levelUps.map(lu => ({ ...lu.character.pendingLevelUp, characterName: lu.name })));
             }, 3000);
           }
         }
@@ -319,8 +273,7 @@ export default function GameScreen() {
             return char;
           });
           updateParty(updatedParty);
-          const itemNames = foundLoot.map(i => i.name).join(', ');
-          setTimeout(() => alert(`📦 Found: ${itemNames}!`), 1000);
+          setTimeout(() => alert(`📦 Found: ${foundLoot.map(i => i.name).join(', ')}!`), 1000);
         }
 
         // Status Effect Detection
@@ -343,7 +296,7 @@ export default function GameScreen() {
             const effectDef = require('../utils/statusEffectSystem').STATUS_EFFECT_DEFINITIONS[e.type];
             return effectDef ? effectDef.name : e.type;
           }).join(', ');
-          setTimeout(() => { alert(`✨ Status Effect Applied: ${effectNames}!`); }, 1500);
+          setTimeout(() => alert(`✨ Status Effect Applied: ${effectNames}!`), 1500);
         }
 
         // Quest Detection
@@ -353,7 +306,7 @@ export default function GameScreen() {
           questEvents.forEach(event => {
             if (event.type === 'quest_started' && event.quest) {
               addQuest(event.quest);
-              setTimeout(() => { alert(`📜 New Quest: ${event.quest.title}!\n\n${event.quest.description}`); }, 1000);
+              setTimeout(() => alert(`📜 New Quest: ${event.quest.title}!\n\n${event.quest.description}`), 1000);
             } else if (event.type === 'quest_completed') {
               const activeQuest = quests.find(q => q.status === 'active');
               if (activeQuest) {
@@ -364,17 +317,11 @@ export default function GameScreen() {
                   setXPNotification({ xpGained: activeQuest.rewards.xp, reason: `Quest Complete: ${activeQuest.title}` });
                   if (xpResult.levelUps.length > 0) {
                     setTimeout(() => {
-                      setLevelUpQueue(prev => [
-                        ...prev,
-                        ...xpResult.levelUps.map(lu => ({
-                          ...lu.character.pendingLevelUp,
-                          characterName: lu.name,
-                        }))
-                      ]);
+                      setLevelUpQueue(prev => [...prev, ...xpResult.levelUps.map(lu => ({ ...lu.character.pendingLevelUp, characterName: lu.name }))]);
                     }, 3000);
                   }
                 }
-                setTimeout(() => { alert(`✓ Quest Completed: ${activeQuest.title}!\n\nRewards:\n• ${activeQuest.rewards.xp} XP\n• ${activeQuest.rewards.gold} Gold`); }, 1500);
+                setTimeout(() => alert(`✓ Quest Completed: ${activeQuest.title}!\n\nRewards:\n• ${activeQuest.rewards.xp} XP\n• ${activeQuest.rewards.gold} Gold`), 1500);
               }
             } else if (event.type === 'quest_updated') {
               console.log("📝 Quest progress updated");
@@ -394,9 +341,7 @@ export default function GameScreen() {
           console.log('🏪 Merchant detected:', detectedMerchant.name);
           setActiveMerchant(detectedMerchant);
           setShowShop(true);
-          setTimeout(() => {
-            alert(`🏪 ${detectedMerchant.icon} ${detectedMerchant.name} is open for business!`);
-          }, 1200);
+          setTimeout(() => alert(`🏪 ${detectedMerchant.icon} ${detectedMerchant.name} is open for business!`), 1200);
         }
 
         // Combat Detection
@@ -406,7 +351,7 @@ export default function GameScreen() {
           if (combatDetection.type === 'start' && !combat?.isActive) {
             setTimeout(() => { alert("⚔️ Combat begins! Select your enemies."); setShowStartCombat(true); }, 1500);
           } else if (combatDetection.type === 'end' && combat?.isActive) {
-            setTimeout(() => { handleEndCombat({ result: 'victory', message: 'Victory! All enemies defeated.', xpReward: 100 }); }, 1000);
+            setTimeout(() => handleEndCombat({ result: 'victory', message: 'Victory! All enemies defeated.', xpReward: 100 }), 1000);
           }
         }
       }
@@ -433,25 +378,17 @@ export default function GameScreen() {
   };
 
   const handleCharacterUpdate = (updatedCharacter) => {
-    const updatedParty = party.map(char => char.name === updatedCharacter.name ? updatedCharacter : char);
-    updateParty(updatedParty);
+    updateParty(party.map(char => char.name === updatedCharacter.name ? updatedCharacter : char));
     setSelectedCharacter(updatedCharacter);
   };
 
-  const handleViewCharacter = (character) => {
-    setSelectedCharacter(character);
-    setShowCharacterSheet(true);
-  };
+  const handleViewCharacter = (character) => { setSelectedCharacter(character); setShowCharacterSheet(true); };
 
   const handleStartCombat = (newCombat) => {
     setCombat(newCombat);
     setShowStartCombat(false);
     const newEnemies = newCombat.combatants.filter(c => c.isEnemy).map(e => e.id.split('_')[0]);
-    setEncounteredEnemies(prev => {
-      const unique = [...new Set([...prev, ...newEnemies])];
-      console.log("📖 Encountered enemies:", unique);
-      return unique;
-    });
+    setEncounteredEnemies(prev => { const unique = [...new Set([...prev, ...newEnemies])]; console.log("📖 Encountered enemies:", unique); return unique; });
     if (musicSystemRef.current) musicSystemRef.current.playTrack('combat_easy');
   };
 
@@ -459,12 +396,8 @@ export default function GameScreen() {
 
   const handleEndCombat = (result) => {
     if (musicSystemRef.current) {
-      if (result.result === 'victory') {
-        musicSystemRef.current.playTrack('victory');
-        setTimeout(() => { if (musicSystemRef.current) musicSystemRef.current.playTrack('peaceful_village'); }, 8000);
-      } else if (result.result === 'defeat') {
-        musicSystemRef.current.playTrack('defeat');
-      }
+      if (result.result === 'victory') { musicSystemRef.current.playTrack('victory'); setTimeout(() => { if (musicSystemRef.current) musicSystemRef.current.playTrack('peaceful_village'); }, 8000); }
+      else if (result.result === 'defeat') musicSystemRef.current.playTrack('defeat');
     }
     if (result.result === 'victory' && result.xpReward) {
       const xpResult = awardXPToParty(party, result.xpReward, 'Combat Victory');
@@ -472,13 +405,7 @@ export default function GameScreen() {
       setXPNotification({ xpGained: result.xpReward, reason: 'Combat Victory!' });
       if (xpResult.levelUps.length > 0) {
         setTimeout(() => {
-          setLevelUpQueue(prev => [
-            ...prev,
-            ...xpResult.levelUps.map(lu => ({
-              ...lu.character.pendingLevelUp,
-              characterName: lu.name,
-            }))
-          ]);
+          setLevelUpQueue(prev => [...prev, ...xpResult.levelUps.map(lu => ({ ...lu.character.pendingLevelUp, characterName: lu.name }))]);
         }, 3000);
       }
     }
@@ -503,45 +430,28 @@ export default function GameScreen() {
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <div>
               <h2 style={{ margin: 0 }}>{campaign.theme} Adventure</h2>
-              <p style={{ margin: '5px 0 0 0', color: '#aaa', fontSize: '16px' }}>
-                Difficulty: {campaign.difficulty}
-              </p>
+              <p style={{ margin: '5px 0 0 0', color: '#aaa', fontSize: '16px' }}>Difficulty: {campaign.difficulty}</p>
             </div>
             <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
               <button onClick={() => setShowQuestJournal(true)} className="btn btn-info" style={{ position: 'relative' }}>
                 📖 Quests
-                {activeQuestCount > 0 && (
-                  <span style={{position: 'absolute', top: '-8px', right: '-8px', backgroundColor: '#ffd700', color: '#000', borderRadius: '50%', width: '24px', height: '24px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '12px', fontWeight: 'bold', border: '2px solid #1a1a1a'}}>
-                    {activeQuestCount}
-                  </span>
-                )}
+                {activeQuestCount > 0 && <span style={{position: 'absolute', top: '-8px', right: '-8px', backgroundColor: '#ffd700', color: '#000', borderRadius: '50%', width: '24px', height: '24px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '12px', fontWeight: 'bold', border: '2px solid #1a1a1a'}}>{activeQuestCount}</span>}
               </button>
-
               <button onClick={() => setShowBestiary(true)} className="btn btn-danger" style={{ position: 'relative' }}>
                 📚 Bestiary
-                {encounteredEnemies.length > 0 && (
-                  <span style={{position: 'absolute', top: '-8px', right: '-8px', backgroundColor: '#ffd700', color: '#000', borderRadius: '50%', width: '24px', height: '24px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '12px', fontWeight: 'bold', border: '2px solid #1a1a1a'}}>
-                    {encounteredEnemies.length}
-                  </span>
-                )}
+                {encounteredEnemies.length > 0 && <span style={{position: 'absolute', top: '-8px', right: '-8px', backgroundColor: '#ffd700', color: '#000', borderRadius: '50%', width: '24px', height: '24px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '12px', fontWeight: 'bold', border: '2px solid #1a1a1a'}}>{encounteredEnemies.length}</span>}
               </button>
-
               <button
-                onClick={() => {
-                  if (!activeMerchant) setActiveMerchant(createMerchant(MERCHANT_TYPES.GENERAL, 'Travelling Merchant'));
-                  setShowShop(true);
-                }}
+                onClick={() => { if (!activeMerchant) setActiveMerchant(createMerchant(MERCHANT_TYPES.GENERAL, 'Travelling Merchant')); setShowShop(true); }}
                 className="btn"
-                style={{
-                  backgroundColor: activeMerchant ? '#c9a84c' : '#3a3000',
-                  color: activeMerchant ? '#000' : '#c9a84c',
-                  border: '1px solid #c9a84c',
-                  position: 'relative'
-                }}
+                style={{ backgroundColor: activeMerchant ? '#c9a84c' : '#3a3000', color: activeMerchant ? '#000' : '#c9a84c', border: '1px solid #c9a84c', position: 'relative' }}
               >
                 🏪 {activeMerchant ? activeMerchant.name : 'Shop'}
               </button>
-
+              {/* ⛺ Rest button */}
+              <button onClick={() => setShowRestModal(true)} className="btn" style={{ backgroundColor: '#1a1a2a', color: '#7986CB', border: '1px solid #5C6BC0' }}>
+                ⛺ Rest
+              </button>
               <button onClick={() => setShowStartCombat(true)} className="btn btn-danger">⚔️ Combat</button>
               <button onClick={() => setShowSaveModal(true)} className="btn btn-success">💾 Save</button>
               <button onClick={() => setShowLoadModal(true)} className="btn btn-info">📂 Load</button>
@@ -572,64 +482,36 @@ export default function GameScreen() {
             {party.map((c, i) => {
               const hpPercent = (c.hp / c.maxHp) * 100;
               const hpColor = hpPercent > 50 ? '#4CAF50' : hpPercent > 25 ? '#ff9800' : '#f44336';
-              const isSpellcaster = SPELLCASTING_CLASSES[c.class] &&
-                (SPELLCASTING_CLASSES[c.class] !== 'third' || isThirdCaster(c));
+              const isSpellcaster = SPELLCASTING_CLASSES[c.class] && (SPELLCASTING_CLASSES[c.class] !== 'third' || isThirdCaster(c));
               const activeEffects = c.conditions?.length || 0;
-              
               return (
                 <div key={i} className="card card-hover" onClick={() => handleViewCharacter(c)} style={{ cursor: 'pointer' }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '12px' }}>
                     <div>
                       <h4 style={{ margin: '0 0 5px 0' }}>{c.name}</h4>
-                      <p style={{ margin: 0, fontSize: '13px', color: '#aaa' }}>
-                        Lvl {c.level} {c.race} {c.class}
-                        {isSpellcaster && <span style={{ marginLeft: '5px', color: '#9C27B0' }}>✨</span>}
-                      </p>
+                      <p style={{ margin: 0, fontSize: '13px', color: '#aaa' }}>Lvl {c.level} {c.race} {c.class}{isSpellcaster && <span style={{ marginLeft: '5px', color: '#9C27B0' }}>✨</span>}</p>
                     </div>
                     <div style={{ display: 'flex', gap: '5px', flexWrap: 'wrap' }}>
                       <button onClick={(e) => { e.stopPropagation(); handleViewCharacter(c); }} className="btn btn-success btn-sm">📋 Sheet</button>
                       <button onClick={(e) => { e.stopPropagation(); handleOpenInventory(c); }} className="btn btn-info btn-sm">🎒 Bag</button>
-                      {isSpellcaster && (
-                        <button onClick={(e) => { e.stopPropagation(); handleOpenSpellBook(c); }} className="btn btn-sm" style={{backgroundColor: '#9C27B0', color: 'white', padding: '4px 8px', fontSize: '12px'}}>
-                          ✨ Spells
-                        </button>
-                      )}
-                      <button
-                        onClick={(e) => { e.stopPropagation(); handleOpenStatusEffects(c); }}
-                        className="btn btn-sm"
-                        style={{backgroundColor: '#FF9800', color: 'white', padding: '4px 8px', fontSize: '12px', position: 'relative'}}
-                      >
+                      {isSpellcaster && <button onClick={(e) => { e.stopPropagation(); handleOpenSpellBook(c); }} className="btn btn-sm" style={{backgroundColor: '#9C27B0', color: 'white', padding: '4px 8px', fontSize: '12px'}}>✨ Spells</button>}
+                      <button onClick={(e) => { e.stopPropagation(); handleOpenStatusEffects(c); }} className="btn btn-sm" style={{backgroundColor: '#FF9800', color: 'white', padding: '4px 8px', fontSize: '12px', position: 'relative'}}>
                         🎭 Effects
-                        {activeEffects > 0 && (
-                          <span style={{position: 'absolute', top: '-6px', right: '-6px', backgroundColor: '#f44336', color: 'white', borderRadius: '50%', width: '16px', height: '16px', fontSize: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold'}}>
-                            {activeEffects}
-                          </span>
-                        )}
+                        {activeEffects > 0 && <span style={{position: 'absolute', top: '-6px', right: '-6px', backgroundColor: '#f44336', color: 'white', borderRadius: '50%', width: '16px', height: '16px', fontSize: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold'}}>{activeEffects}</span>}
                       </button>
                     </div>
                   </div>
                   <div style={{ marginTop: '12px' }}>
                     <div style={{ fontSize: '12px', color: '#aaa', marginBottom: '5px' }}>HP: {c.hp} / {c.maxHp}</div>
-                    <div className="progress-bar">
-                      <div className="progress-fill" style={{ width: `${hpPercent}%`, backgroundColor: hpColor }} />
-                    </div>
+                    <div className="progress-bar"><div className="progress-fill" style={{ width: `${hpPercent}%`, backgroundColor: hpColor }} /></div>
                   </div>
                   {c.xp !== undefined && <div style={{ marginTop: '8px', fontSize: '12px', color: '#888' }}>XP: {c.xp}</div>}
                   {isSpellcaster && c.spellSlots?.current && (
                     <div style={{ marginTop: '8px', fontSize: '11px', color: '#9C27B0' }}>
-                      Spell Slots: {c.spellSlots.current.filter(s => s > 0).length > 0 ?
-                        c.spellSlots.current.slice(0, 5).map((slots, i) => slots > 0 ? `${i+1}:${slots} ` : '').join('').trim()
-                        : 'None'}
+                      Spell Slots: {c.spellSlots.current.filter(s => s > 0).length > 0 ? c.spellSlots.current.slice(0, 5).map((slots, i) => slots > 0 ? `${i+1}:${slots} ` : '').join('').trim() : 'None'}
                     </div>
                   )}
-                  <StatusEffectsPanel
-                    character={c}
-                    onUpdateCharacter={(updated) => {
-                      const updatedParty = party.map(char => char.name === updated.name ? updated : char);
-                      updateParty(updatedParty);
-                    }}
-                    compact={true}
-                  />
+                  <StatusEffectsPanel character={c} onUpdateCharacter={(updated) => { updateParty(party.map(char => char.name === updated.name ? updated : char)); }} compact={true} />
                 </div>
               );
             })}
@@ -637,9 +519,7 @@ export default function GameScreen() {
         </div>
 
         {/* Dice Roller */}
-        <div style={{ marginBottom: '20px' }}>
-          <DiceRoller onRoll={handleDiceRoll} />
-        </div>
+        <div style={{ marginBottom: '20px' }}><DiceRoller onRoll={handleDiceRoll} /></div>
 
         {/* Chat Log */}
         <div className="card mb-lg">
@@ -660,18 +540,10 @@ export default function GameScreen() {
       {combat && combat.isActive && <CombatTracker combat={combat} onUpdate={handleUpdateCombat} onEnd={handleEndCombat} party={party} updateParty={updateParty} />}
       {showStartCombat && <StartCombatModal party={party} onStart={handleStartCombat} onClose={() => setShowStartCombat(false)} />}
 
-      {/* ── Level Up Modal — queue-based, one character at a time ── */}
       {activeLevelUp && (() => {
         const char = party.find(c => c.name === activeLevelUp.characterName);
         if (!char) return null;
-        return (
-          <LevelUpModal
-            levelUpData={activeLevelUp}
-            character={char}
-            onComplete={handleLevelUpComplete}
-            onClose={() => setLevelUpQueue(prev => prev.slice(1))}
-          />
-        );
+        return <LevelUpModal levelUpData={activeLevelUp} character={char} onComplete={handleLevelUpComplete} onClose={() => setLevelUpQueue(prev => prev.slice(1))} />;
       })()}
 
       {xpNotification && <XPNotification xpGained={xpNotification.xpGained} reason={xpNotification.reason} onComplete={() => setXPNotification(null)} />}
@@ -686,34 +558,18 @@ export default function GameScreen() {
         </div>
       )}
 
-      {showQuestJournal && (
-        <QuestJournal quests={quests} onUpdateQuest={updateQuest} onCompleteQuest={completeQuestById} onClose={() => setShowQuestJournal(false)} />
-      )}
+      {showQuestJournal && <QuestJournal quests={quests} onUpdateQuest={updateQuest} onCompleteQuest={completeQuestById} onClose={() => setShowQuestJournal(false)} />}
+      {showBestiary && <Bestiary encounteredEnemies={encounteredEnemies} onClose={() => setShowBestiary(false)} />}
+      {showSpellBook && activeSpellcaster && <SpellBook character={activeSpellcaster} onUpdateCharacter={handleUpdateSpellcaster} onClose={() => { setShowSpellBook(false); setActiveSpellcaster(null); }} />}
+      {showApplyStatusEffect && statusEffectTarget && <ApplyStatusEffectModal character={statusEffectTarget} onApply={handleApplyStatusEffect} onClose={() => { setShowApplyStatusEffect(false); setStatusEffectTarget(null); }} />}
 
-      {showBestiary && (
-        <Bestiary encounteredEnemies={encounteredEnemies} onClose={() => setShowBestiary(false)} />
-      )}
-
-      {showSpellBook && activeSpellcaster && (
-        <SpellBook character={activeSpellcaster} onUpdateCharacter={handleUpdateSpellcaster} onClose={() => { setShowSpellBook(false); setActiveSpellcaster(null); }} />
-      )}
-
-      {showApplyStatusEffect && statusEffectTarget && (
-        <ApplyStatusEffectModal character={statusEffectTarget} onApply={handleApplyStatusEffect} onClose={() => { setShowApplyStatusEffect(false); setStatusEffectTarget(null); }} />
-      )}
-
-      {/* 🏪 Shop Modal */}
       {showShop && activeMerchant && (
-        <ShopModal
-          merchant={activeMerchant}
-          party={party}
-          onUpdateParty={updateParty}
-          onUpdateMerchant={updateActiveMerchant}
-          onClose={() => {
-            setShowShop(false);
-            clearActiveMerchant();
-          }}
-        />
+        <ShopModal merchant={activeMerchant} party={party} onUpdateParty={updateParty} onUpdateMerchant={updateActiveMerchant} onClose={() => { setShowShop(false); clearActiveMerchant(); }} />
+      )}
+
+      {/* ⛺ Rest Modal */}
+      {showRestModal && (
+        <RestModal party={party} onConfirm={handleRestConfirm} onClose={() => setShowRestModal(false)} />
       )}
 
       <SaveLoadModal isOpen={showSaveModal} onClose={() => setShowSaveModal(false)} mode="save" campaign={campaign} party={party} onLoad={handleLoadCampaign} />
