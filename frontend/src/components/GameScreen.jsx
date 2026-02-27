@@ -35,6 +35,7 @@ import StatusEffectsPanel from './StatusEffectsPanel';
 import ApplyStatusEffectModal from './ApplyStatusEffectModal';
 import PatreonButton from "./PatreonButton";
 import ShopModal from './ShopModal';
+import RestModal from './RestModal';
 
 /* ============================
    Combat Detection Helper
@@ -125,6 +126,7 @@ export default function GameScreen() {
   const [showApplyStatusEffect, setShowApplyStatusEffect] = useState(false);
   const [statusEffectTarget, setStatusEffectTarget] = useState(null);
   const [showShop, setShowShop] = useState(false);
+  const [showRestModal, setShowRestModal] = useState(false);
   
   const audioRef = useRef(null);
   const audioQueue = useRef([]);
@@ -486,6 +488,15 @@ export default function GameScreen() {
     alert(result.message);
   };
 
+  const handleRestConfirm = (updatedParty, restType) => {
+    updateParty(updatedParty);
+    setShowRestModal(false);
+    const label = restType === 'long' ? 'Long Rest' : 'Short Rest';
+    // Notify DM about the rest so it can react narratively
+    setInput(`[The party takes a ${label}]`);
+    console.log(`[Rest] ${label} complete — party updated.`);
+  };
+
   if (!campaign) return (
     <div className="container" style={{ textAlign: 'center', paddingTop: '100px' }}>
       <h1>No Campaign Started</h1>
@@ -540,6 +551,14 @@ export default function GameScreen() {
                 }}
               >
                 🏪 {activeMerchant ? activeMerchant.name : 'Shop'}
+              </button>
+
+              <button
+                onClick={() => setShowRestModal(true)}
+                className="btn"
+                style={{ backgroundColor: '#1a1a2a', color: '#7986CB', border: '1px solid #5C6BC0' }}
+              >
+                ⛺ Rest
               </button>
 
               <button onClick={() => setShowStartCombat(true)} className="btn btn-danger">⚔️ Combat</button>
@@ -713,6 +732,14 @@ export default function GameScreen() {
             setShowShop(false);
             clearActiveMerchant();
           }}
+        />
+      )}
+
+      {showRestModal && (
+        <RestModal
+          party={party}
+          onConfirm={handleRestConfirm}
+          onClose={() => setShowRestModal(false)}
         />
       )}
 
