@@ -2,22 +2,22 @@
 import React from 'react';
 
 export default function PatreonButton({ position = 'fixed' }) {
-  const patreonUrl = "https://www.patreon.com/hakty933"; // ← Replace with your Patreon URL
+  const patreonUrl = "https://www.patreon.com/hakty933";
 
   const fixedStyle = {
     position: 'fixed',
     bottom: '20px',
     right: '20px',
-    zIndex: 1000,
+    zIndex: 500, // Below modals (1000+) and combat tracker (1000), but above page content
     backgroundColor: '#FF424D',
     color: 'white',
-    padding: '12px 24px',
+    padding: '10px 18px',
     borderRadius: '25px',
     textDecoration: 'none',
     display: 'flex',
     alignItems: 'center',
     gap: '8px',
-    fontSize: '16px',
+    fontSize: '14px',
     fontWeight: 'bold',
     boxShadow: '0 4px 12px rgba(255, 66, 77, 0.4)',
     transition: 'all 0.3s ease',
@@ -61,14 +61,7 @@ export default function PatreonButton({ position = 'fixed' }) {
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
     >
-      {/* Patreon Logo SVG */}
-      <svg
-        width="20"
-        height="20"
-        viewBox="0 0 569 546"
-        fill="currentColor"
-        xmlns="http://www.w3.org/2000/svg"
-      >
+      <svg width="16" height="16" viewBox="0 0 569 546" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
         <circle cx="362.589996" cy="204.589996" r="204.589996" fill="white"/>
         <rect width="100" height="545.799988" fill="white"/>
       </svg>

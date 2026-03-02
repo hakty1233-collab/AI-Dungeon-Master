@@ -108,6 +108,19 @@ function formatPartyForPrompt(party) {
     lines.push(`### ${p.name} — Level ${p.level} ${p.race} ${p.class}${p.subclass ? ` (${p.subclass})` : ''}`);
     lines.push(`HP: ${p.hp}/${p.maxHp} | AC: ${p.armorClass || 10} | XP: ${p.xp || 0}`);
 
+    // Gender / pronouns — CRITICAL: DM must use correct pronouns and never misidentify character
+    if (p.gender) {
+      const pronounMap = { male: 'he/him', female: 'she/her', 'non-binary': 'they/them', other: 'they/them' };
+      const pronouns = pronounMap[p.gender?.toLowerCase()] || p.gender;
+      lines.push(`Gender: ${p.gender} (pronouns: ${pronouns}) — ALWAYS use these pronouns in narration`);
+    }
+
+    // Backstory — gives DM full character context and identity
+    if (p.backstory) {
+      const snippet = p.backstory.length > 300 ? p.backstory.slice(0, 300) + '...' : p.backstory;
+      lines.push(`Backstory: ${snippet}`);
+    }
+
     // Ability scores
     if (p.abilities || p.abilityScores) {
       const ab = p.abilities || p.abilityScores;
@@ -256,6 +269,7 @@ ${recentHistory || 'Campaign is just beginning.'}
 DUNGEON MASTER INSTRUCTIONS
 ════════════════════════════════════
 PARTY AWARENESS — You MUST:
+- ALWAYS use the correct gender pronouns for each character as listed in their profile. Never assume gender from a name.
 - Reference character names, not "you" alone — "Thorin swings his axe..." not just "you attack"
 - Acknowledge HP levels: characters near death should feel it in the narration
 - Reference equipped weapons/armor in combat descriptions

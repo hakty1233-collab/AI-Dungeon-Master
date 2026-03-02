@@ -56,25 +56,39 @@ function detectCombatInNarration(narration) {
 function detectStatusEffectsInNarration(narration) {
   const lowerText = narration.toLowerCase();
   const detectedEffects = [];
+
+  // Only trigger when the narration explicitly applies an effect TO the party/player.
+  // Require phrases like "you are", "you become", "you feel", "party is", "[name] is/becomes/feels"
+  // to avoid false positives from flavour text like "the vampire bleeds" or "fear gripped the town".
+  const partyTargetPhrases = [
+    'you are ', 'you become', 'you feel ', 'you have been', 'you fall ',
+    'you catch ', 'you are now', 'you start to', 'you begin to',
+    'the party is', 'the party becomes', 'party member', 'your character'
+  ];
+  const isTargetingParty = partyTargetPhrases.some(p => lowerText.includes(p));
+  if (!isTargetingParty) return [];
+
+  // Tight keyword sets — only very specific phrases that mean the PLAYER is afflicted
   const effectKeywords = {
-    [STATUS_EFFECTS.POISONED]: ['poisoned', 'poison', 'venom', 'toxic'],
-    [STATUS_EFFECTS.PARALYZED]: ['paralyzed', 'paralysis', 'cannot move'],
-    [STATUS_EFFECTS.STUNNED]: ['stunned', 'dazed', 'disoriented'],
-    [STATUS_EFFECTS.FRIGHTENED]: ['frightened', 'terrified', 'scared', 'fear'],
-    [STATUS_EFFECTS.CHARMED]: ['charmed', 'enchanted', 'beguiled'],
-    [STATUS_EFFECTS.BLINDED]: ['blinded', 'blind', 'cannot see'],
-    [STATUS_EFFECTS.PRONE]: ['knocked prone', 'falls prone', 'knocked down'],
-    [STATUS_EFFECTS.RESTRAINED]: ['restrained', 'grappled', 'held', 'entangled'],
-    [STATUS_EFFECTS.UNCONSCIOUS]: ['unconscious', 'knocked out', 'falls unconscious'],
-    [STATUS_EFFECTS.BURNING]: ['on fire', 'burning', 'catches fire', 'ignites'],
-    [STATUS_EFFECTS.BLEEDING]: ['bleeding', 'blood', 'wounded'],
-    [STATUS_EFFECTS.BLESSED]: ['blessed', 'divine favor', 'bless'],
-    [STATUS_EFFECTS.HASTED]: ['hasted', 'speed increased', 'quickened'],
-    [STATUS_EFFECTS.SLOWED]: ['slowed', 'sluggish', 'speed reduced'],
+    [STATUS_EFFECTS.POISONED]:   ['you are poisoned', 'you become poisoned', 'poison courses through you', 'you feel the venom'],
+    [STATUS_EFFECTS.PARALYZED]:  ['you are paralyzed', 'you become paralyzed', 'you cannot move', 'paralysis grips you'],
+    [STATUS_EFFECTS.STUNNED]:    ['you are stunned', 'you become stunned', 'you are dazed', 'you feel disoriented'],
+    [STATUS_EFFECTS.FRIGHTENED]: ['you are frightened', 'you become frightened', 'you are terrified', 'fear grips you', 'you feel afraid'],
+    [STATUS_EFFECTS.CHARMED]:    ['you are charmed', 'you become charmed', 'you feel charmed', 'you are beguiled'],
+    [STATUS_EFFECTS.BLINDED]:    ['you are blinded', 'you become blind', 'you cannot see', 'your vision goes dark', 'your eyes go dark'],
+    [STATUS_EFFECTS.PRONE]:      ['you are knocked prone', 'you fall prone', 'you are knocked down', 'you fall to the ground'],
+    [STATUS_EFFECTS.RESTRAINED]: ['you are restrained', 'you are grappled', 'you are entangled', 'you are held in place'],
+    [STATUS_EFFECTS.UNCONSCIOUS]:['you fall unconscious', 'you are knocked unconscious', 'you lose consciousness', 'you black out'],
+    [STATUS_EFFECTS.BURNING]:    ['you catch fire', 'you are on fire', 'you are burning', 'flames engulf you'],
+    [STATUS_EFFECTS.BLEEDING]:   ['you are bleeding', 'you begin to bleed', 'blood pours from your'],
+    [STATUS_EFFECTS.BLESSED]:    ['you are blessed', 'you feel blessed', 'divine favor washes over you'],
+    [STATUS_EFFECTS.HASTED]:     ['you are hasted', 'you feel hasted', 'your speed increases', 'you are quickened'],
+    [STATUS_EFFECTS.SLOWED]:     ['you are slowed', 'you feel slowed', 'your speed is reduced', 'you move sluggishly'],
   };
+
   Object.entries(effectKeywords).forEach(([effectType, keywords]) => {
     if (keywords.some(keyword => lowerText.includes(keyword))) {
-      console.log(`✨ Detected status effect: ${effectType}`);
+      console.log(`✨ Status effect applied to party: ${effectType}`);
       const duration = (effectType === STATUS_EFFECTS.BURNING || effectType === STATUS_EFFECTS.BLEEDING) ? 3 : 1;
       detectedEffects.push({ type: effectType, duration, durationType: DURATION_TYPES.ROUNDS, source: 'Combat', saveDC: null });
     }
@@ -162,7 +176,22 @@ export default function GameScreen() {
     if (!voiceMode) return;
     try {
       setIsGeneratingVoice(true);
-      const cleanText = text.replace(/\*\*(.*?)\*\*/g, "$1").replace(/\*(.*?)\*/g, "$1").replace(/#{1,6}\s/g, "");
+      // Clean text for TTS — fix punctuation that causes ElevenLabs to stutter
+      let cleanText = text
+        .replace(/\*\*(.*?)\*\*/g, "$1")    // remove bold
+        .replace(/\*(.*?)\*/g, "$1")          // remove italic
+        .replace(/#{1,6}\s/g, "")              // remove headers
+        .replace(/\u2019/g, "'")               // curly apostrophe → straight
+        .replace(/\u2018/g, "'")               // curly open quote
+        .replace(/\u201C/g, '"')               // curly open double quote
+        .replace(/\u201D/g, '"')               // curly close double quote
+        .replace(/\u2014/g, ', ')              // em dash → comma pause
+        .replace(/\u2013/g, '-')               // en dash
+        .replace(/\u2026/g, '...')             // ellipsis character
+        .replace(/[\u0080-\u009F]/g, '')       // strip control chars
+        .replace(/[^\x00-\x7F']/g, ' ')        // strip remaining non-ASCII (keep apostrophe)
+        .replace(/\s+/g, ' ')                  // collapse whitespace
+        .trim();
       const audioData = await generateVoice({ text: cleanText, voice });
       audioQueue.current.push({ audio: audioData, type: `narration_${voice}`, volume: 1.0 });
       if (!isPlaying.current) playAudioQueue();
@@ -266,14 +295,30 @@ export default function GameScreen() {
         if (foundLoot.length > 0) {
           const updatedParty = party.map((char, index) => {
             if (index === 0) {
-              let newInventory = char.inventory || [];
-              foundLoot.forEach(item => { newInventory = addItemToInventory(newInventory, item); });
-              return { ...char, inventory: newInventory };
+              let updatedChar = { ...char };
+              foundLoot.forEach(item => {
+                if (item._goldAmount) {
+                  // Gold: update both inventory stack AND top-level gold stat
+                  const inv = updatedChar.inventory || [];
+                  const goldIdx = inv.findIndex(i => i.id === 'gold');
+                  if (goldIdx !== -1) {
+                    const newInv = [...inv];
+                    newInv[goldIdx] = { ...newInv[goldIdx], quantity: newInv[goldIdx].quantity + item._goldAmount };
+                    updatedChar = { ...updatedChar, inventory: newInv, gold: (updatedChar.gold || 0) + item._goldAmount };
+                  } else {
+                    updatedChar = { ...updatedChar, inventory: addItemToInventory(inv, item), gold: (updatedChar.gold || 0) + item._goldAmount };
+                  }
+                } else {
+                  updatedChar = { ...updatedChar, inventory: addItemToInventory(updatedChar.inventory || [], item) };
+                }
+              });
+              return updatedChar;
             }
             return char;
           });
           updateParty(updatedParty);
-          setTimeout(() => alert(`📦 Found: ${foundLoot.map(i => i.name).join(', ')}!`), 1000);
+          const lootNames = foundLoot.map(i => i._goldAmount ? `${i._goldAmount} gold` : i.name).join(', ');
+          setTimeout(() => alert(`📦 Found: ${lootNames}!`), 1000);
         }
 
         // Status Effect Detection
@@ -527,8 +572,8 @@ export default function GameScreen() {
           <ChatLog history={campaign.history} />
         </div>
 
-        {/* Input */}
-        <div className="card">
+        {/* Input — paddingBottom ensures Patreon fixed button never overlaps */}
+        <div className="card" style={{ marginBottom: '80px' }}>
           <form onSubmit={handleSubmit} style={{ display: 'flex', gap: '10px' }}>
             <input value={input} onChange={(e) => setInput(e.target.value)} placeholder="What do you do?" className="input" disabled={isGeneratingVoice} style={{ flex: 1 }} />
             <button type="submit" disabled={isGeneratingVoice} className="btn btn-primary">Submit</button>
