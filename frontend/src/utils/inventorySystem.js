@@ -202,9 +202,6 @@ export function detectLootInNarration(narration) {
   } else {
     console.log('[Loot] Gold skipped — price context detected');
   }
-      }
-    }
-  }
 
   // ── WEAPONS — only when phrasing implies acquisition ──
   const acquisitionContext = /(?:find|found|receive|reward|pick\s*up|loot|given|grant|discover|obtain|equipped?\s+with)/i;
