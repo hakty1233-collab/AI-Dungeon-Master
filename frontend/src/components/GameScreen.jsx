@@ -176,21 +176,89 @@ export default function GameScreen() {
     if (!voiceMode) return;
     try {
       setIsGeneratingVoice(true);
-      // Clean text for TTS — fix punctuation that causes ElevenLabs to stutter
+      // Clean text for TTS — expand contractions so ElevenLabs never stutters on apostrophes
       let cleanText = text
-        .replace(/\*\*(.*?)\*\*/g, "$1")    // remove bold
-        .replace(/\*(.*?)\*/g, "$1")          // remove italic
-        .replace(/#{1,6}\s/g, "")              // remove headers
-        .replace(/\u2019/g, "'")               // curly apostrophe → straight
-        .replace(/\u2018/g, "'")               // curly open quote
-        .replace(/\u201C/g, '"')               // curly open double quote
-        .replace(/\u201D/g, '"')               // curly close double quote
-        .replace(/\u2014/g, ', ')              // em dash → comma pause
-        .replace(/\u2013/g, '-')               // en dash
-        .replace(/\u2026/g, '...')             // ellipsis character
-        .replace(/[\u0080-\u009F]/g, '')       // strip control chars
-        .replace(/[^\x00-\x7F']/g, ' ')        // strip remaining non-ASCII (keep apostrophe)
-        .replace(/\s+/g, ' ')                  // collapse whitespace
+        .replace(/\*\*(.*?)\*\*/g, "$1")
+        .replace(/\*(.*?)\*/g, "$1")
+        .replace(/#{1,6}\s/g, "")
+        // Curly/special quotes → ASCII
+        .replace(/[\u2018\u2019\u0060\u00B4]/g, "'")
+        .replace(/[\u201C\u201D]/g, '"')
+        .replace(/\u2014/g, ", ")
+        .replace(/\u2013/g, "-")
+        .replace(/\u2026/g, "...")
+        // Expand ALL common English contractions → no apostrophe needed
+        .replace(/\bI'm\b/gi,       "I am")
+        .replace(/\bI've\b/gi,      "I have")
+        .replace(/\bI'll\b/gi,      "I will")
+        .replace(/\bI'd\b/gi,       "I would")
+        .replace(/\bI'dn't\b/gi,    "I would not")
+        .replace(/\byou're\b/gi,    "you are")
+        .replace(/\byou've\b/gi,    "you have")
+        .replace(/\byou'll\b/gi,    "you will")
+        .replace(/\byou'd\b/gi,     "you would")
+        .replace(/\bhe's\b/gi,      "he is")
+        .replace(/\bhe'd\b/gi,      "he would")
+        .replace(/\bhe'll\b/gi,     "he will")
+        .replace(/\bshe's\b/gi,     "she is")
+        .replace(/\bshe'd\b/gi,     "she would")
+        .replace(/\bshe'll\b/gi,    "she will")
+        .replace(/\bit's\b/gi,      "it is")
+        .replace(/\bit'll\b/gi,     "it will")
+        .replace(/\bwe're\b/gi,     "we are")
+        .replace(/\bwe've\b/gi,     "we have")
+        .replace(/\bwe'll\b/gi,     "we will")
+        .replace(/\bwe'd\b/gi,      "we would")
+        .replace(/\bthey're\b/gi,   "they are")
+        .replace(/\bthey've\b/gi,   "they have")
+        .replace(/\bthey'll\b/gi,   "they will")
+        .replace(/\bthey'd\b/gi,    "they would")
+        .replace(/\bthat's\b/gi,    "that is")
+        .replace(/\bthat'll\b/gi,   "that will")
+        .replace(/\bthat'd\b/gi,    "that would")
+        .replace(/\bwho's\b/gi,     "who is")
+        .replace(/\bwho've\b/gi,    "who have")
+        .replace(/\bwho'll\b/gi,    "who will")
+        .replace(/\bwho'd\b/gi,     "who would")
+        .replace(/\bwhat's\b/gi,    "what is")
+        .replace(/\bwhere's\b/gi,   "where is")
+        .replace(/\bwhen's\b/gi,    "when is")
+        .replace(/\bwhy's\b/gi,     "why is")
+        .replace(/\bhow's\b/gi,     "how is")
+        .replace(/\bhere's\b/gi,    "here is")
+        .replace(/\bthere's\b/gi,   "there is")
+        .replace(/\bthere're\b/gi,  "there are")
+        .replace(/\bthere'll\b/gi,  "there will")
+        .replace(/\bthere'd\b/gi,   "there would")
+        .replace(/\baren't\b/gi,    "are not")
+        .replace(/\bisn't\b/gi,     "is not")
+        .replace(/\bwasn't\b/gi,    "was not")
+        .replace(/\bweren't\b/gi,   "were not")
+        .replace(/\bdon't\b/gi,     "do not")
+        .replace(/\bdoesn't\b/gi,   "does not")
+        .replace(/\bdid not\b/gi,   "did not")
+        .replace(/\bdidn't\b/gi,    "did not")
+        .replace(/\bcan't\b/gi,     "cannot")
+        .replace(/\bcannot\b/gi,    "cannot")
+        .replace(/\bcouldn't\b/gi,  "could not")
+        .replace(/\bwon't\b/gi,     "will not")
+        .replace(/\bwouldn't\b/gi,  "would not")
+        .replace(/\bshouldn't\b/gi, "should not")
+        .replace(/\bshan't\b/gi,    "shall not")
+        .replace(/\bmightn't\b/gi,  "might not")
+        .replace(/\bmustn't\b/gi,   "must not")
+        .replace(/\bneedn't\b/gi,   "need not")
+        .replace(/\bdaren't\b/gi,   "dare not")
+        .replace(/\bhaven't\b/gi,   "have not")
+        .replace(/\bhasn't\b/gi,    "has not")
+        .replace(/\bhadn't\b/gi,    "had not")
+        // possessives — replace 's with nothing clean (e.g. "warrior's" → "warriors")
+        .replace(/'s\b/g, "s")
+        .replace(/'([a-z])/gi, "$1")   // any remaining apostrophe before letter
+        .replace(/'/g, "")             // strip all remaining apostrophes
+        // Strip remaining non-ASCII and collapse whitespace
+        .replace(/[^\x00-\x7F]/g, " ")
+        .replace(/\s+/g, " ")
         .trim();
       const audioData = await generateVoice({ text: cleanText, voice });
       audioQueue.current.push({ audio: audioData, type: `narration_${voice}`, volume: 1.0 });
@@ -380,13 +448,16 @@ export default function GameScreen() {
           });
         }
 
-        // Merchant Detection
-        const detectedMerchant = detectMerchantInNarration(dmResponse.aiResponse);
-        if (detectedMerchant && !activeMerchant) {
-          console.log('🏪 Merchant detected:', detectedMerchant.name);
-          setActiveMerchant(detectedMerchant);
-          setShowShop(true);
-          setTimeout(() => alert(`🏪 ${detectedMerchant.icon} ${detectedMerchant.name} is open for business!`), 1200);
+        // Merchant Detection — only open shop on explicit **SHOP** marker from the AI DM.
+        // Keyword scanning (tavern, inn, buy, sells) caused the shop to pop on every tavern scene.
+        if (dmResponse.aiResponse.includes('**SHOP**') && !activeMerchant) {
+          const detectedMerchant = detectMerchantInNarration(dmResponse.aiResponse);
+          if (detectedMerchant) {
+            console.log('🏪 Shop marker detected:', detectedMerchant.name);
+            setActiveMerchant(detectedMerchant);
+            setShowShop(true);
+            setTimeout(() => alert(`🏪 ${detectedMerchant.icon} ${detectedMerchant.name} is open for business!`), 1200);
+          }
         }
 
         // Combat Detection
@@ -401,7 +472,7 @@ export default function GameScreen() {
         }
       }
 
-      autoSave(dmResponse.campaignState, party);
+      autoSave(dmResponse.campaignState, party, quests);
 
       if (dmResponse?.aiResponse) {
         await speakAIResponse(dmResponse.aiResponse);
@@ -417,9 +488,13 @@ export default function GameScreen() {
     }
   };
 
-  const handleLoadCampaign = (loadedCampaign, loadedParty) => {
+  const handleLoadCampaign = (loadedCampaign, loadedParty, loadedQuests = []) => {
     setCampaign({ ...loadedCampaign, party: loadedParty });
-    alert("Campaign loaded successfully!");
+    // Restore quests from save
+    if (loadedQuests.length > 0) {
+      loadedQuests.forEach(q => addQuest(q));
+    }
+    alert("✅ Campaign loaded!");
   };
 
   const handleCharacterUpdate = (updatedCharacter) => {

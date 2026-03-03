@@ -294,7 +294,10 @@ COMBAT DETECTION:
 - When all enemies defeated → include "**COMBAT_END**" in narration
 
 MERCHANT DETECTION:
-- When the party enters a shop or meets a merchant → include "**SHOP**" in narration
+- ONLY include "**SHOP**" in narration when the party is actively browsing or able to buy/sell RIGHT NOW
+- Do NOT include **SHOP** just because a tavern, inn, or market is mentioned in passing
+- Do NOT include **SHOP** when describing prices or costs without a transaction happening
+- A tavern scene is NOT a shop unless the party explicitly asks to buy something
 
 DICE ROLLS:
 - When player mentions a dice roll result, incorporate it meaningfully

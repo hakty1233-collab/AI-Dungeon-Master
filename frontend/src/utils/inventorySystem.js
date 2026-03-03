@@ -185,20 +185,23 @@ export function detectLootInNarration(narration) {
   const lower = narration.toLowerCase();
   const found  = [];
 
-  // ── GOLD — match "X gold", "X gp", "X gold coins" near reward context ──
-  // Accept patterns like "50 gold", "50 gp", "rewarded with 50 gold", "find 50 gold pieces"
-  const goldPatterns = [
-    /(?:receive|reward(?:ed)?|find|found|earn|gain|given|grant(?:ed)?|pocket)[^.]{0,40}?(\d+)\s*(?:gold|gp)\b/i,
-    /(\d+)\s*(?:gold(?:\s+coins?|\s+pieces?)?|gp)\b/i,
-  ];
-  for (const pattern of goldPatterns) {
-    const match = narration.match(pattern);
-    if (match) {
-      const amount = parseInt(match[1]);
-      if (amount > 0 && amount < 100000) { // sanity cap
+  // ── GOLD — only award gold when narration explicitly gives it to the party ──
+  // Excluded: price/cost phrases like "costs 5 gold", "5 gold pieces each", "price is 5 gp"
+  // Required: explicit acquisition verb near the amount
+
+  const isPriceContext = /\b(?:costs?|cost(?:ing)?|price[sd]?|worth|valued?\s+at|charges?|\bfee\b|\bper\b|\beach\b|\bbuys?\b|purchases?|asking\s+for)\b[^.]{0,80}?\d+\s*(?:gold|gp)\b/i.test(narration);
+  if (!isPriceContext) {
+    const goldAward = narration.match(/(?:receive[sd]?|reward(?:ed)?|find|found|earn(?:ed)?|gain(?:ed)?|given|grant(?:ed)?|pocket(?:ed)?|hand(?:ed)?\s+you|pays?\s+you|hand(?:s)?\s+over|drop[sd]?)[^.]{0,80}?(\d+)\s*(?:gold(?:\s+coins?|\s+pieces?)?|gp)\b/i);
+    if (goldAward) {
+      const amount = parseInt(goldAward[1]);
+      if (amount > 0 && amount < 10000) {
         found.push({ isGold: true, amount });
-        console.log(`[Loot] Gold detected: ${amount} gp`);
-        break; // only count once
+        console.log('[Loot] Gold awarded:', amount, 'gp');
+      }
+    }
+  } else {
+    console.log('[Loot] Gold skipped — price context detected');
+  }
       }
     }
   }
